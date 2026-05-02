@@ -14,6 +14,9 @@ from gemini_api import analyze_situation, detect_sudden_motion
 from speech_api import process_audio
 from vision_api import analyze_frame
 
+from database import Base, engine
+from auth.webauthn_routes import router as auth_router
+
 VIDEO_PATH = os.path.join(os.path.dirname(__file__), "data", "Footage-1.mp4")
 PROCESSED_VIDEO_PATH = os.path.join(os.path.dirname(__file__), "data", "Footage-1-processed.mp4")
 
@@ -24,6 +27,9 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+Base.metadata.create_all(bind=engine)
+app.include_router(auth_router)
 
 metrics_store = []
 metrics_lock = threading.Lock()

@@ -69,6 +69,8 @@ def print_metrics(vision_decision, audio_decision, final_decision):
 cap = cv2.VideoCapture(VIDEO_PATH)
 fps = cap.get(cv2.CAP_PROP_FPS)
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+if fps == 0:
+    fps = 30  # default fallback
 duration = total_frames / fps
 
 print(f"Video FPS: {fps:.1f}, Duration: {duration:.1f}s, Total frames: {total_frames}")
