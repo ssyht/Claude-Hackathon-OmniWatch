@@ -158,8 +158,8 @@ npx http-server . -p 3000
 | Username | Role | Password |
 |---|---|---|
 | sanjit | admin | (biometric / set on first login) |
-| lomesh | admin | (biometric / set on first login) |
-| shinoy | admin | (biometric / set on first login) |
+| user2  | admin | (biometric / set on first login) |
+| user3 | admin | (biometric / set on first login) |
 | judge1 | viewer | |
 | judge2 | viewer | |
 
