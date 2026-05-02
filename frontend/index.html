@@ -1,0 +1,3331 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OmniWatch — Real-Time AI Emergency Detection</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  
+  
+
+  <style>
+    :root {
+      --void: #05040a;
+      --deep: #0a0814;
+      --purple: #6c3de8;
+      --violet: #9b5de5;
+      --lavender: #c77dff;
+      --pink: #e040fb;
+      --glow: rgba(156, 93, 229, 0.6);
+      --glow-soft: rgba(156, 93, 229, 0.15);
+      --white: #ffffff;
+      --cream: #f0ede8;
+      --muted: rgba(240, 237, 232, 0.4);
+      --dim: rgba(240, 237, 232, 0.2);
+      --red-alert: #ff3366;
+      --green-ok: #00ffaa;
+
+      --glass-bg: rgba(255, 255, 255, 0.04);
+      --glass-border: rgba(255, 255, 255, 0.12);
+      --glass-blur: 20px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background: var(--void);
+      color: var(--cream);
+      font-family: 'Syne', sans-serif;
+      overflow-x: hidden;
+      cursor: none;
+    }
+
+    /* ── Custom cursor ── */
+    #cursor {
+      position: fixed;
+      width: 8px;
+      height: 8px;
+      background: var(--lavender);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 99999;
+      transform: translate(-50%, -50%);
+      transition: transform 0.1s ease;
+      mix-blend-mode: screen;
+    }
+
+    #cursor-ring {
+      position: fixed;
+      width: 36px;
+      height: 36px;
+      border: 1px solid rgba(156, 93, 229, 0.5);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 99998;
+      transform: translate(-50%, -50%);
+      transition: all 0.12s ease;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 9998;
+      opacity: 0.35;
+    }
+
+    /* ── Ambient orbs ── */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      filter: blur(80px);
+      z-index: 0;
+    }
+
+    .orb-1 {
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(108, 61, 232, 0.35) 0%, transparent 70%);
+      top: -150px;
+      left: -100px;
+      animation: drift1 18s ease-in-out infinite;
+    }
+
+    .orb-2 {
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(224, 64, 251, 0.2) 0%, transparent 70%);
+      bottom: 20%;
+      right: -100px;
+      animation: drift2 22s ease-in-out infinite;
+    }
+
+    .orb-3 {
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(156, 93, 229, 0.25) 0%, transparent 70%);
+      top: 40%;
+      left: 40%;
+      animation: drift3 16s ease-in-out infinite;
+    }
+
+    @keyframes drift1 {
+
+      0%,
+      100% {
+        transform: translate(0, 0)
+      }
+
+      33% {
+        transform: translate(40px, -30px)
+      }
+
+      66% {
+        transform: translate(-20px, 50px)
+      }
+    }
+
+    @keyframes drift2 {
+
+      0%,
+      100% {
+        transform: translate(0, 0)
+      }
+
+      33% {
+        transform: translate(-50px, 40px)
+      }
+
+      66% {
+        transform: translate(30px, -20px)
+      }
+    }
+
+    @keyframes drift3 {
+
+      0%,
+      100% {
+        transform: translate(0, 0)
+      }
+
+      50% {
+        transform: translate(-40px, -40px)
+      }
+    }
+
+    /* ── Glass ── */
+    .glass {
+      background: var(--glass-bg);
+      backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .glass::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    }
+
+    .glass::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(156, 93, 229, 0.06) 0%, transparent 40%, rgba(224, 64, 251, 0.04) 100%);
+      pointer-events: none;
+      border-radius: inherit;
+    }
+
+    /* ── Nav ── */
+    nav {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100% - 48px);
+      max-width: 1200px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      background: rgba(10, 8, 20, 0.6);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid rgba(156, 93, 229, 0.2);
+      border-radius: 999px;
+      z-index: 9000;
+    }
+
+    nav::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 15%;
+      right: 15%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(156, 93, 229, 0.6), transparent);
+    }
+
+    .nav-logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-pulse {
+      width: 6px;
+      height: 6px;
+      background: var(--red-alert);
+      border-radius: 50%;
+      animation: pulse-ring 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-ring {
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 0 rgba(255, 51, 102, 0.6)
+      }
+
+      50% {
+        box-shadow: 0 0 0 6px rgba(255, 51, 102, 0)
+      }
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--cream);
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    #nav-user {
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(199, 125, 255, 0.5);
+    }
+
+    .nav-cta {
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 8px 20px;
+      background: rgba(108, 61, 232, 0.3);
+      border: 1px solid rgba(156, 93, 229, 0.4);
+      border-radius: 999px;
+      color: var(--lavender) !important;
+      text-decoration: none;
+      transition: all 0.3s;
+      cursor: pointer;
+    }
+
+    .nav-cta:hover {
+      background: rgba(108, 61, 232, 0.5);
+      color: var(--white) !important;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 120px 5% 80px;
+      z-index: 1;
+      overflow: hidden;
+    }
+
+    .portal-wrap {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 340px;
+      height: 520px;
+      pointer-events: none;
+    }
+
+    .portal-arch {
+      display: none;
+    }
+
+    .portal-glow {
+      position: absolute;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 200px;
+      height: 350px;
+      border-radius: 100px 100px 0 0;
+      background: radial-gradient(ellipse at 50% 30%, rgba(156, 93, 229, 0.8) 0%, rgba(108, 61, 232, 0.4) 30%, transparent 70%);
+      filter: blur(24px);
+      animation: portal-breathe 4s ease-in-out infinite;
+    }
+
+    .portal-inner {
+      position: absolute;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 160px;
+      height: 280px;
+      border-radius: 80px 80px 0 0;
+      background: radial-gradient(ellipse at 50% 20%, rgba(199, 125, 255, 0.9) 0%, rgba(156, 93, 229, 0.6) 40%, rgba(108, 61, 232, 0.2) 70%, transparent 90%);
+      filter: blur(8px);
+    }
+
+    .stars {
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(1px 1px at 20% 15%, rgba(255, 255, 255, 0.8) 0%, transparent 100%), radial-gradient(1px 1px at 80% 10%, rgba(255, 255, 255, 0.6) 0%, transparent 100%), radial-gradient(1px 1px at 60% 25%, rgba(255, 255, 255, 0.7) 0%, transparent 100%), radial-gradient(1px 1px at 30% 35%, rgba(255, 255, 255, 0.5) 0%, transparent 100%), radial-gradient(1px 1px at 75% 30%, rgba(255, 255, 255, 0.6) 0%, transparent 100%), radial-gradient(1px 1px at 45% 8%, rgba(255, 255, 255, 0.9) 0%, transparent 100%), radial-gradient(1px 1px at 55% 20%, rgba(156, 93, 229, 0.8) 0%, transparent 100%), radial-gradient(1px 1px at 35% 12%, rgba(199, 125, 255, 0.7) 0%, transparent 100%);
+    }
+
+    .dunes {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 220px;
+      background: radial-gradient(ellipse 120% 60% at 50% 100%, rgba(108, 61, 232, 0.25) 0%, rgba(50, 20, 120, 0.15) 40%, transparent 70%);
+    }
+
+    @keyframes portal-breathe {
+
+      0%,
+      100% {
+        opacity: 1;
+        transform: translateX(-50%) scaleY(1)
+      }
+
+      50% {
+        opacity: 0.7;
+        transform: translateX(-50%) scaleY(0.96)
+      }
+    }
+
+    .hero-eyebrow {
+      font-size: 10px;
+      letter-spacing: 5px;
+      text-transform: uppercase;
+      color: var(--violet);
+      margin-bottom: 24px;
+      margin-top: 380px;
+      opacity: 0;
+      animation: fadeUp 1s ease 0.4s forwards;
+    }
+
+    .hero-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(3.5rem, 9vw, 8rem);
+      font-weight: 300;
+      line-height: 1.0;
+      margin-bottom: 28px;
+      opacity: 0;
+      animation: fadeUp 1s ease 0.6s forwards;
+    }
+
+    .hero-title em {
+      font-style: italic;
+      color: var(--lavender);
+    }
+
+    .hero-title strong {
+      font-weight: 600;
+      font-style: normal;
+      font-family: 'Syne', sans-serif;
+      font-size: 0.55em;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--cream);
+      display: block;
+      margin-top: 8px;
+    }
+
+    .hero-sub {
+      font-size: 14px;
+      line-height: 1.8;
+      color: var(--muted);
+      max-width: 480px;
+      margin-bottom: 48px;
+      opacity: 0;
+      animation: fadeUp 1s ease 0.8s forwards;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      opacity: 0;
+      animation: fadeUp 1s ease 1s forwards;
+    }
+
+    .btn-primary {
+      padding: 14px 36px;
+      background: linear-gradient(135deg, rgba(108, 61, 232, 0.7), rgba(156, 93, 229, 0.5));
+      border: 1px solid rgba(156, 93, 229, 0.5);
+      border-radius: 999px;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--cream);
+      text-decoration: none;
+      backdrop-filter: blur(12px);
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-primary::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+      transition: left 0.5s;
+    }
+
+    .btn-primary:hover::before {
+      left: 100%;
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, rgba(108, 61, 232, 0.9), rgba(156, 93, 229, 0.7));
+      box-shadow: 0 0 40px rgba(156, 93, 229, 0.4);
+      transform: translateY(-2px);
+    }
+
+    .btn-ghost {
+      padding: 14px 32px;
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 999px;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      text-decoration: none;
+      transition: all 0.3s;
+    }
+
+    .btn-ghost:hover {
+      border-color: rgba(156, 93, 229, 0.4);
+      color: var(--cream);
+    }
+
+    .hero-stats {
+      display: flex;
+      gap: 0;
+      margin-top: 80px;
+      opacity: 0;
+      animation: fadeUp 1s ease 1.2s forwards;
+    }
+
+    .hero-stat {
+      padding: 24px 48px;
+      text-align: center;
+      border-right: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .hero-stat:last-child {
+      border-right: none;
+    }
+
+    .stat-n {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 3.5rem;
+      font-weight: 300;
+      line-height: 1;
+      color: var(--lavender);
+      display: block;
+    }
+
+    .stat-l {
+      font-size: 9px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 6px;
+      display: block;
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(24px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    /* ── Section ── */
+    section {
+      position: relative;
+      z-index: 1;
+      padding: 120px 6%;
+    }
+
+    .section-label {
+      font-size: 9px;
+      letter-spacing: 5px;
+      text-transform: uppercase;
+      color: var(--violet);
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(2.5rem, 6vw, 5.5rem);
+      font-weight: 300;
+      line-height: 1.05;
+      margin-bottom: 60px;
+    }
+
+    .section-title em {
+      font-style: italic;
+      color: var(--lavender);
+    }
+
+    /* ── Philosophy ── */
+    .philosophy {
+      min-height: 70vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 100px 10%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .philosophy-orb {
+      position: absolute;
+      bottom: -40px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 300px;
+      background: radial-gradient(ellipse at 50% 80%, rgba(156, 93, 229, 0.7) 0%, rgba(108, 61, 232, 0.3) 30%, transparent 60%);
+      filter: blur(40px);
+      animation: orb-breathe 6s ease-in-out infinite;
+    }
+
+    @keyframes orb-breathe {
+
+      0%,
+      100% {
+        transform: translateX(-50%) scaleX(1);
+        opacity: 0.8
+      }
+
+      50% {
+        transform: translateX(-50%) scaleX(1.1);
+        opacity: 1
+      }
+    }
+
+    .philosophy-eyebrow {
+      font-size: 9px;
+      letter-spacing: 5px;
+      text-transform: uppercase;
+      color: var(--violet);
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .philosophy-eyebrow::before,
+    .philosophy-eyebrow::after {
+      content: '';
+      width: 40px;
+      height: 1px;
+      background: var(--violet);
+    }
+
+    .philosophy-quote {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(2rem, 5vw, 4.5rem);
+      font-weight: 300;
+      line-height: 1.15;
+      color: var(--cream);
+      position: relative;
+      z-index: 2;
+    }
+
+    .philosophy-quote em {
+      font-style: italic;
+      color: var(--lavender);
+    }
+
+    /* ── Features ── */
+    @keyframes feat-pulse {
+      0%, 100% { opacity: 0.55; transform: scale(1); }
+      50% { opacity: 0.85; transform: scale(1.07); }
+    }
+    @keyframes feat-shimmer {
+      0% { background-position: -200% center; }
+      100% { background-position: 200% center; }
+    }
+    @keyframes feat-orb-drift {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(8px, -12px) scale(1.08); }
+      66% { transform: translate(-6px, 6px) scale(0.95); }
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px;
+    }
+
+    .feat-cell {
+      background:
+        linear-gradient(160deg, rgba(156, 93, 229, 0.13) 0%, rgba(10, 8, 20, 0.96) 60%),
+        radial-gradient(circle at 20% 0%, rgba(199, 125, 255, 0.22), transparent 50%);
+      border: 1px solid rgba(199, 125, 255, 0.18);
+      border-radius: 16px;
+      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      min-height: 320px;
+      padding: 36px 30px 32px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.4s cubic-bezier(.22,.8,.35,1), border-color 0.4s ease, box-shadow 0.4s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* animated corner glow orb */
+    .feat-cell::after {
+      content: '';
+      position: absolute;
+      bottom: -40px;
+      right: -40px;
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(156, 93, 229, 0.28), transparent 70%);
+      animation: feat-orb-drift 6s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    .feat-cell::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--violet), rgba(120, 255, 180, 0.8), transparent);
+      background-size: 200% auto;
+      animation: feat-shimmer 3s linear infinite;
+      opacity: 0.8;
+    }
+
+    .feat-cell:hover {
+      border-color: rgba(199, 125, 255, 0.48);
+      box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5), 0 0 60px rgba(156, 93, 229, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      transform: translateY(-6px);
+    }
+
+    .feat-cell:hover::after {
+      background: radial-gradient(circle, rgba(156, 93, 229, 0.45), transparent 70%);
+    }
+
+    /* large decorative SVG icon area */
+    .feat-graphic {
+      width: 64px;
+      height: 64px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .feat-graphic svg {
+      width: 32px;
+      height: 32px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .feat-graphic::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 14px;
+      opacity: 0.18;
+    }
+
+    .feat-cell[data-color="violet"] .feat-graphic {
+      background: rgba(156, 93, 229, 0.18);
+      border: 1px solid rgba(156, 93, 229, 0.4);
+      box-shadow: 0 0 28px rgba(156, 93, 229, 0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .feat-cell[data-color="violet"] .feat-graphic svg { color: #c47dff; }
+
+    .feat-cell[data-color="cyan"] .feat-graphic {
+      background: rgba(0, 200, 220, 0.14);
+      border: 1px solid rgba(0, 200, 220, 0.35);
+      box-shadow: 0 0 28px rgba(0, 200, 220, 0.2), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .feat-cell[data-color="cyan"] .feat-graphic svg { color: #00d4e8; }
+
+    .feat-cell[data-color="green"] .feat-graphic {
+      background: rgba(0, 255, 150, 0.12);
+      border: 1px solid rgba(0, 255, 150, 0.3);
+      box-shadow: 0 0 28px rgba(0, 255, 150, 0.18), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .feat-cell[data-color="green"] .feat-graphic svg { color: #00ff96; }
+
+    .feat-cell[data-color="amber"] .feat-graphic {
+      background: rgba(255, 180, 50, 0.12);
+      border: 1px solid rgba(255, 180, 50, 0.3);
+      box-shadow: 0 0 28px rgba(255, 180, 50, 0.18), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .feat-cell[data-color="amber"] .feat-graphic svg { color: #ffb432; }
+
+    .feat-icon {
+      width: fit-content;
+      min-width: 96px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px 11px;
+      border: 1px solid rgba(199, 125, 255, 0.42);
+      border-radius: 999px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 8px;
+      letter-spacing: 2.4px;
+      text-transform: uppercase;
+      color: rgba(240, 237, 232, 0.7);
+      background: rgba(156, 93, 229, 0.1);
+      margin-bottom: 12px;
+    }
+
+    .feat-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(1.25rem, 1.6vw, 1.6rem);
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      line-height: 1.1;
+      color: var(--white);
+      margin-bottom: 14px;
+    }
+
+    .feat-desc {
+      color: rgba(240, 237, 232, 0.65);
+      font-size: 13px;
+      line-height: 1.85;
+      flex: 1;
+    }
+
+    .feat-num {
+      position: absolute;
+      top: 20px;
+      right: 22px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: rgba(240, 237, 232, 0.15);
+    }
+
+    /* stat badge at bottom of card */
+    .feat-stat {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255,255,255,0.07);
+    }
+    .feat-stat-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      animation: feat-pulse 2.4s ease-in-out infinite;
+    }
+    .feat-cell[data-color="violet"] .feat-stat-dot { background: #c47dff; box-shadow: 0 0 8px #c47dff; }
+    .feat-cell[data-color="cyan"]   .feat-stat-dot { background: #00d4e8; box-shadow: 0 0 8px #00d4e8; }
+    .feat-cell[data-color="green"]  .feat-stat-dot { background: #00ff96; box-shadow: 0 0 8px #00ff96; }
+    .feat-cell[data-color="amber"]  .feat-stat-dot { background: #ffb432; box-shadow: 0 0 8px #ffb432; }
+    .feat-stat-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1.6px;
+      text-transform: uppercase;
+      color: rgba(240,237,232,0.4);
+    }
+
+    /* ── Simulation ── */
+    .sim-grid {
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      gap: 16px;
+    }
+
+    .cam-container {
+      border-radius: 24px;
+      overflow: hidden;
+      position: relative;
+      aspect-ratio: 16/10;
+      background: #030209;
+      border: 1px solid rgba(156, 93, 229, 0.2);
+      transition: border-color 0.4s, box-shadow 0.4s;
+    }
+
+    .feed-switcher {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .feed-tab {
+      appearance: none;
+      border: 1px solid rgba(156, 93, 229, 0.22);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      padding: 10px 16px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 2.6px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: border-color 0.25s, color 0.25s, background 0.25s;
+    }
+
+    .feed-tab.active {
+      border-color: rgba(199, 125, 255, 0.7);
+      background: rgba(156, 93, 229, 0.18);
+      color: var(--cream);
+    }
+
+    .feed-tab:hover {
+      border-color: rgba(199, 125, 255, 0.55);
+      color: var(--cream);
+    }
+
+    .blank-feed {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background:
+        linear-gradient(135deg, rgba(8, 6, 20, 0.96), rgba(24, 10, 42, 0.88)),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 7px);
+      color: var(--muted);
+      text-align: center;
+      padding: 32px;
+    }
+
+    .cam-container.blank-active .blank-feed {
+      display: flex;
+    }
+
+    .blank-feed-copy {
+      max-width: 360px;
+    }
+
+    .blank-feed-kicker {
+      font-size: 8px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--violet);
+      margin-bottom: 14px;
+    }
+
+    .blank-feed-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--cream);
+      margin-bottom: 10px;
+    }
+
+    .blank-feed-note {
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .cam-container.alert-state {
+      border-color: rgba(255, 51, 102, 0.6) !important;
+      box-shadow: 0 0 40px rgba(255, 51, 102, 0.15), inset 0 0 40px rgba(255, 51, 102, 0.05) !important;
+    }
+
+    .cam-hud-top {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent);
+      z-index: 10;
+    }
+
+    .cam-id {
+      font-size: 9px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: rgba(240, 237, 232, 0.5);
+    }
+
+    .cam-live {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: var(--red-alert);
+    }
+
+    .live-dot {
+      width: 5px;
+      height: 5px;
+      background: var(--red-alert);
+      border-radius: 50%;
+      animation: blink 1s ease infinite;
+    }
+
+    @keyframes blink {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: 0.2
+      }
+    }
+
+    .cam-hud-bottom {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 12px 20px 16px;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+      z-index: 10;
+      transition: transform 0.5s ease;
+    }
+
+    .conf-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .conf-label {
+      font-size: 8px;
+      letter-spacing: 2px;
+      color: var(--muted);
+    }
+
+    .priority-pill {
+      font-size: 7px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid;
+      transition: color 0.4s, border-color 0.4s;
+    }
+
+    .priority-pill.ok {
+      color: var(--green-ok);
+      border-color: var(--green-ok);
+    }
+
+    .priority-pill.warn {
+      color: #ffcc00;
+      border-color: #ffcc00;
+    }
+
+    .priority-pill.crit {
+      color: var(--red-alert);
+      border-color: var(--red-alert);
+      animation: pill-flash 0.6s ease-in-out infinite alternate;
+    }
+
+    @keyframes pill-flash {
+      0% {
+        box-shadow: none
+      }
+
+      100% {
+        box-shadow: 0 0 12px rgba(255, 51, 102, 0.5)
+      }
+    }
+
+    .conf-track {
+      height: 2px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 1px;
+    }
+
+    .conf-fill {
+      height: 100%;
+      border-radius: 1px;
+      background: var(--green-ok);
+      transition: width 0.5s ease, background 0.5s ease;
+    }
+
+    /* Side panel */
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .glass-panel {
+      padding: 24px;
+    }
+
+    .panel-label {
+      font-size: 8px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--violet);
+      margin-bottom: 16px;
+    }
+
+    .metric-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .metric-chip {
+      background: rgba(108, 61, 232, 0.08);
+      border: 1px solid rgba(156, 93, 229, 0.15);
+      border-radius: 12px;
+      padding: 14px;
+      transition: border-color 0.4s;
+    }
+
+    .metric-chip-val {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 2rem;
+      font-weight: 300;
+      line-height: 1;
+      display: block;
+      margin-bottom: 4px;
+      transition: color 0.4s;
+    }
+
+    .metric-chip-key {
+      font-size: 7px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* mini cam row */
+    .mini-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .mini-cam {
+      border-radius: 10px;
+      overflow: hidden;
+      aspect-ratio: 4/3;
+      background: #060410;
+      position: relative;
+      border: 1px solid rgba(156, 93, 229, 0.1);
+    }
+
+    .mini-cam-lbl {
+      position: absolute;
+      bottom: 4px;
+      left: 6px;
+      font-size: 6px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+
+    .alert-panel {
+      padding: 20px;
+      transition: border-color 0.4s, box-shadow 0.4s;
+    }
+
+    .alert-panel.triggered {
+      border-color: rgba(255, 51, 102, 0.4) !important;
+      box-shadow: 0 0 30px rgba(255, 51, 102, 0.08) !important;
+    }
+
+    /* State indicator */
+    .state-bar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+
+    .state-step {
+      flex: 1;
+      height: 3px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.08);
+      transition: background 0.4s;
+    }
+
+    .state-step.active {
+      background: var(--lavender);
+    }
+
+    .state-step.done {
+      background: rgba(199, 125, 255, 0.4);
+    }
+
+    .state-step.crit {
+      background: var(--red-alert);
+    }
+
+    .state-label {
+      font-size: 7px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 8px;
+    }
+
+    .state-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.1rem;
+      color: var(--cream);
+    }
+
+    /* ── Map ── */
+    #map-wrapper {
+      border-radius: 24px;
+      overflow: hidden;
+      border: 1px solid rgba(156, 93, 229, 0.2);
+      position: relative;
+      background: #060410;
+    }
+
+
+    #map-wrapper::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(135deg, rgba(5, 4, 10, 0.12) 0%, transparent 40%, rgba(108, 61, 232, 0.05) 100%);
+      border-radius: 24px;
+      z-index: 500;
+    }
+
+    #map-overlay-panel {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      z-index: 1000;
+      background: rgba(10, 8, 20, 0.88);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(156, 93, 229, 0.25);
+      border-radius: 8px;
+      padding: 9px 11px;
+      font-family: 'Syne', sans-serif;
+      min-width: 180px;
+      max-width: 240px;
+    }
+
+    .map-overlay-title {
+      font-size: 6px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--violet);
+      margin-bottom: 6px;
+    }
+
+    .map-overlay-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 9px;
+      color: var(--muted);
+      margin-bottom: 3px;
+    }
+
+    .map-overlay-row span:last-child {
+      color: var(--cream);
+    }
+
+    .map-overlay-note {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      color: rgba(240, 237, 232, 0.68);
+      font-size: 8px;
+      line-height: 1.35;
+    }
+
+    #map-loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: #060410;
+      z-index: 600;
+      border-radius: 24px;
+      transition: opacity 0.4s;
+    }
+
+    .map-spinner {
+      width: 32px;
+      height: 32px;
+      border: 2px solid rgba(156, 93, 229, 0.2);
+      border-top-color: var(--lavender);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    .map-loading-text {
+      font-size: 9px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ── Hospital cards ── */
+    .hosp-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .hosp-card {
+      padding: 24px;
+      transition: border-color 0.3s, transform 0.3s;
+      cursor: default;
+    }
+
+    .hosp-card:hover {
+      transform: translateY(-3px);
+    }
+
+    .hosp-card.optimal {
+      border-color: rgba(0, 255, 170, 0.3) !important;
+      box-shadow: 0 0 30px rgba(0, 255, 170, 0.06) !important;
+    }
+
+    .hosp-tag {
+      font-size: 7px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid;
+      display: inline-block;
+      margin-bottom: 12px;
+    }
+
+    .hosp-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.1rem;
+      font-weight: 400;
+      margin-bottom: 10px;
+      line-height: 1.3;
+    }
+
+    .hosp-eta {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 2.4rem;
+      font-weight: 300;
+      line-height: 1;
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .hosp-meta {
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ── Log ── */
+    .log-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      animation: fadeUp 0.4s ease;
+    }
+
+    .log-row.medical {
+      background: linear-gradient(90deg, rgba(0, 255, 170, 0.055), transparent 38%);
+    }
+
+    .log-row.police {
+      background: linear-gradient(90deg, rgba(245, 200, 66, 0.065), transparent 38%);
+    }
+
+    .log-row:last-child {
+      border-bottom: none;
+    }
+
+    .log-sev {
+      width: 2px;
+      align-self: stretch;
+      border-radius: 1px;
+      flex-shrink: 0;
+    }
+
+    .log-time {
+      font-size: 10px;
+      color: var(--muted);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      min-width: 64px;
+    }
+
+    .log-desc {
+      flex: 1;
+      font-size: 12px;
+    }
+
+    .log-service {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 56px;
+      margin-right: 8px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      font-size: 7px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .log-service.medical {
+      border-color: rgba(0, 255, 170, 0.52);
+      color: var(--green-ok);
+      background: rgba(0, 255, 170, 0.08);
+    }
+
+    .log-service.police {
+      border-color: rgba(245, 200, 66, 0.58);
+      color: #f5c842;
+      background: rgba(245, 200, 66, 0.08);
+    }
+
+    .log-cam {
+      font-size: 8px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+
+    /* ── Team ── */
+    .team-section {
+      text-align: center;
+      padding: 120px 10%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .team-orb {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 700px;
+      height: 400px;
+      background: radial-gradient(ellipse, rgba(108, 61, 232, 0.2) 0%, transparent 60%);
+      filter: blur(60px);
+      pointer-events: none;
+    }
+
+    .team-names {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(1rem, 2.5vw, 1.6rem);
+      font-weight: 300;
+      color: var(--muted);
+      letter-spacing: 3px;
+      margin: 20px 0 8px;
+    }
+
+    /* ── Footer ── */
+    footer {
+      padding: 60px 6% 40px;
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: 4px;
+    }
+
+    .footer-logo span {
+      color: var(--lavender);
+    }
+
+    .footer-copy {
+      font-size: 11px;
+      color: var(--dim);
+      letter-spacing: 1px;
+    }
+
+    /* ── Dispatch command panel ── */
+    .dispatch-layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 380px) minmax(420px, 1fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .dispatch-panel {
+      background:
+        linear-gradient(180deg, rgba(12, 18, 26, 0.96), rgba(7, 10, 16, 0.92)),
+        radial-gradient(circle at top left, rgba(155, 93, 229, 0.16), transparent 44%);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 12px;
+      padding: 22px;
+      color: white;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .dispatch-panel::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.07), transparent 42%);
+      pointer-events: none;
+    }
+
+    .dispatch-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .dispatch-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.05rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .dispatch-live {
+      font-size: 7px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--green-ok);
+      border: 1px solid rgba(0, 255, 170, 0.28);
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: rgba(0, 255, 170, 0.06);
+    }
+
+    .dispatch-summary {
+      position: relative;
+      z-index: 1;
+      font-size: 12px;
+      color: rgba(240, 237, 232, 0.64);
+      line-height: 1.55;
+      margin-bottom: 16px;
+    }
+
+    .dispatch-metrics {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      gap: 8px;
+    }
+
+    .dispatch-metric {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 9px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 12px;
+    }
+
+    .dispatch-metric strong {
+      color: rgba(240, 237, 232, 0.55);
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .dispatch-metric span {
+      color: var(--cream);
+      text-align: right;
+      font-weight: 700;
+    }
+
+    #dispatch-status,
+    #dispatch-eta {
+      color: var(--green-ok);
+    }
+
+    .dispatch-chips {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .dispatch-chip {
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      padding: 6px 9px;
+      background: rgba(255, 255, 255, 0.045);
+      color: rgba(240, 237, 232, 0.74);
+      font-size: 8px;
+      letter-spacing: 1.6px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .dispatch-chip.hot {
+      border-color: rgba(255, 51, 102, 0.38);
+      color: #ff7a9b;
+      background: rgba(255, 51, 102, 0.08);
+    }
+
+    .dispatch-progress {
+      position: relative;
+      z-index: 1;
+      margin-top: 16px;
+    }
+
+    .dispatch-progress-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 7px;
+      color: rgba(240, 237, 232, 0.5);
+      font-size: 8px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .dispatch-progress-track {
+      height: 6px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .dispatch-progress-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #00ffaa, #9B5DE5);
+      transition: width 0.25s ease;
+    }
+
+    .dispatch-primary {
+      position: relative;
+      z-index: 1;
+      margin-top: 18px;
+      width: 100%;
+      padding: 12px 16px;
+      border: 0;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #9B5DE5, #6C3DE8);
+      color: white;
+      cursor: pointer;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      box-shadow: 0 10px 24px rgba(155, 93, 229, 0.28);
+    }
+
+    .dispatch-map-shell {
+      min-width: 420px;
+      height: 500px;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+      background: #0b0f14;
+    }
+
+    .dispatch-intel-board {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      padding: 26px;
+      background:
+        radial-gradient(circle at 78% 20%, rgba(0, 255, 170, 0.08), transparent 28%),
+        radial-gradient(circle at 25% 78%, rgba(155, 93, 229, 0.14), transparent 36%),
+        linear-gradient(135deg, rgba(8, 12, 18, 0.96), rgba(5, 7, 12, 0.96));
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 18px;
+    }
+
+    .intel-topline {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .intel-kicker {
+      font-size: 8px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--green-ok);
+      margin-bottom: 8px;
+    }
+
+    .intel-title {
+      font-size: clamp(24px, 3vw, 42px);
+      line-height: 0.95;
+      font-weight: 800;
+      letter-spacing: -1px;
+      max-width: 540px;
+    }
+
+    .intel-live-eta {
+      text-align: right;
+      min-width: 120px;
+    }
+
+    .intel-live-eta span {
+      display: block;
+      font-size: 8px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(240, 237, 232, 0.45);
+      margin-bottom: 4px;
+    }
+
+    .intel-live-eta strong {
+      color: var(--green-ok);
+      font-size: 30px;
+      line-height: 1;
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 600;
+    }
+
+    .intel-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .intel-stat {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 13px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .intel-stat span {
+      display: block;
+      font-size: 7px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(240, 237, 232, 0.42);
+      margin-bottom: 8px;
+    }
+
+    .intel-stat strong {
+      display: block;
+      color: var(--cream);
+      font-size: 14px;
+      line-height: 1.25;
+    }
+
+    .intel-bottom {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .intel-module {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 16px;
+      background: rgba(0, 0, 0, 0.16);
+      min-height: 0;
+    }
+
+    .intel-module-title {
+      font-size: 8px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: rgba(240, 237, 232, 0.48);
+      margin-bottom: 14px;
+    }
+
+    .intel-route-track {
+      height: 6px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.08);
+      margin-bottom: 16px;
+    }
+
+    .intel-route-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #00ffaa, #9B5DE5, #ff3366);
+      transition: width 0.25s ease;
+    }
+
+    .intel-step {
+      display: grid;
+      grid-template-columns: 18px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 9px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      color: rgba(240, 237, 232, 0.5);
+      font-size: 11px;
+    }
+
+    .intel-step-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .intel-step.done,
+    .intel-step.active {
+      color: var(--cream);
+    }
+
+    .intel-step.done .intel-step-dot,
+    .intel-step.active .intel-step-dot {
+      background: var(--green-ok);
+      box-shadow: 0 0 14px rgba(0, 255, 170, 0.45);
+    }
+
+    .intel-step-time {
+      font-size: 8px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: rgba(240, 237, 232, 0.42);
+    }
+
+    .intel-check {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 10px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      color: rgba(240, 237, 232, 0.72);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .intel-check::before {
+      content: '✓';
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 255, 170, 0.11);
+      color: var(--green-ok);
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 1100px) {
+      .intel-grid,
+      .intel-bottom {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .map-controls {
+      margin-top: 16px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .map-btn {
+      border: 1px solid rgba(255, 255, 255, 0.11);
+      border-radius: 8px;
+      padding: 9px 12px;
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(240, 237, 232, 0.86);
+      font-family: 'Syne', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .map-btn:hover {
+      transform: translateY(-1px);
+      border-color: rgba(199, 125, 255, 0.45);
+      background: rgba(155, 93, 229, 0.16);
+    }
+
+    @media (max-width: 900px) {
+      .dispatch-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .dispatch-map-shell {
+        min-width: 0;
+      }
+
+      .dispatch-intel-board {
+        position: relative;
+        min-height: 500px;
+      }
+
+      .intel-topline,
+      .intel-bottom,
+      .intel-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ── Ticker ── */
+    .ticker {
+      overflow: hidden;
+      padding: 12px 0;
+      background: rgba(108, 61, 232, 0.1);
+      border-top: 1px solid rgba(156, 93, 229, 0.2);
+      border-bottom: 1px solid rgba(156, 93, 229, 0.2);
+      white-space: nowrap;
+    }
+
+    .ticker-inner {
+      display: inline-flex;
+      animation: ticker 35s linear infinite;
+    }
+
+    .ticker-text {
+      font-size: 9px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--violet);
+      padding: 0 60px;
+    }
+
+    @keyframes ticker {
+      from {
+        transform: translateX(0)
+      }
+
+      to {
+        transform: translateX(-50%)
+      }
+    }
+
+    /* ── Gemini typing ── */
+    .gemini-cursor {
+      display: inline-block;
+      width: 6px;
+      height: 12px;
+      background: var(--lavender);
+      animation: blink 0.8s step-end infinite;
+      vertical-align: middle;
+      margin-left: 2px;
+      border-radius: 1px;
+    }
+
+    /* ── Survival counter ── */
+    .survival-bar-wrap {
+      margin-top: 12px;
+    }
+
+    .survival-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 7px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 5px;
+    }
+
+    .survival-track {
+      height: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .survival-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--red-alert), #f5c842, var(--green-ok));
+      transition: width 0.6s ease;
+    }
+
+    .divider {
+      width: 1px;
+      background: rgba(255, 255, 255, 0.08);
+      align-self: stretch;
+    }
+
+    @media(max-width:1024px) {
+      .features-grid {
+        grid-template-columns: repeat(2, 1fr)
+      }
+
+      .sim-grid {
+        grid-template-columns: 1fr
+      }
+
+      .nav-links {
+        display: none
+      }
+    }
+
+    @media(max-width:640px) {
+      .features-grid {
+        grid-template-columns: 1fr
+      }
+
+      .hero-stats {
+        flex-direction: column;
+        gap: 0
+      }
+
+      footer {
+        flex-direction: column;
+        gap: 16px;
+        text-align: center
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ── AUTH GUARD ── runs immediately before anything renders ── -->
+  <script>
+    (function () {
+      // const token = sessionStorage.getItem('omniwatch_token');
+      // if (!token) {
+      //   window.location.replace('login.html');
+      // }
+    })();
+  </script>
+
+  <div id="cursor"></div>
+  <div id="cursor-ring"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-logo">
+      <div class="nav-pulse"></div>
+      OMNIWATCH
+    </div>
+    <ul class="nav-links">
+      <li><a href="#simulation">Live Demo</a></li>
+      <li><a href="#features">System</a></li>
+      <li><a href="#routing">Routing</a></li>
+      <li><a href="#team">Team</a></li>
+    </ul>
+    <div class="nav-right">
+      <span id="nav-user"></span>
+      <a href="#" class="nav-cta" id="logout-btn">Logout</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="stars"></div>
+    <div class="portal-wrap">
+      <div class="portal-glow"></div>
+      <div class="portal-inner"></div>
+      <div class="portal-arch"></div>
+    </div>
+    <div class="dunes"></div>
+
+    <div class="hero-eyebrow">Claude Hackathon · San Francisco Map · May 2026</div>
+    <h1 class="hero-title">
+      <em>Omni</em>Watch<br />
+      <strong>Real-Time AI Emergency Detection</strong>
+    </h1>
+    <p class="hero-sub">
+      Watches your cameras. Listens to your building.<br />
+      The moment someone is in danger — it finds the fastest way to get them help.
+    </p>
+    <div class="hero-actions">
+      <a href="#simulation" class="btn-primary">View Live Dashboard</a>
+      <a href="#features" class="btn-ghost">Learn More</a>
+    </div>
+    <div class="hero-stats glass" style="border-radius:999px;padding:0;display:flex;margin-top:64px;">
+      <div class="hero-stat">
+        <span class="stat-n">&lt;10<span style="font-size:1.8rem">s</span></span>
+        <span class="stat-l">Detection Time</span>
+      </div>
+      <div class="divider"></div>
+      <div class="hero-stat">
+        <span class="stat-n">30<span style="font-size:1.8rem">×</span></span>
+        <span class="stat-l">Faster Response</span>
+      </div>
+      <div class="divider"></div>
+      <div class="hero-stat">
+        <span class="stat-n" style="color:var(--red-alert)">+41<span style="font-size:1.8rem">pp</span></span>
+        <span class="stat-l">Survival Gain</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- TICKER -->
+  <div class="ticker">
+    <div class="ticker-inner">
+      <span class="ticker-text">⬡ SYSTEM ACTIVE · 4 FEEDS MONITORED · GEMINI 2.0 FLASH · SUB-10s DETECTION · +41pp
+        SURVIVAL PROBABILITY · REAL-TIME AI EMERGENCY DETECTION · DATASF HOSPITAL NETWORK · AGENTIC AI DISPATCHER</span>
+      <span class="ticker-text">⬡ SYSTEM ACTIVE · 4 FEEDS MONITORED · GEMINI 2.0 FLASH · SUB-10s DETECTION · +41pp
+        SURVIVAL PROBABILITY · REAL-TIME AI EMERGENCY DETECTION · DATASF HOSPITAL NETWORK · AGENTIC AI DISPATCHER</span>
+    </div>
+  </div>
+
+  <!-- PHILOSOPHY -->
+  <section class="philosophy">
+    <div class="philosophy-orb"></div>
+    <div class="philosophy-eyebrow">The Mission</div>
+    <p class="philosophy-quote">
+      <em>Detection</em> is not surveillance.<br />
+      It is sovereign <em>protection.</em>
+    </p>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features" style="padding-top:0">
+    <div class="section-label">01 — Core System</div>
+    <h2 class="section-title">Operational layers for<br /><em>emergency response</em></h2>
+    <div class="features-grid">
+
+      <!-- Card 1: Video Intelligence -->
+      <div class="feat-cell" data-color="violet">
+        <span class="feat-num">01</span>
+        <div class="feat-graphic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14"/>
+            <rect x="3" y="8" width="12" height="8" rx="2"/>
+            <circle cx="9" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+          </svg>
+        </div>
+        <span class="feat-icon">Primary Input</span>
+        <div class="feat-title">Video Intelligence</div>
+        <div class="feat-desc">Frame-level motion analysis flags falls, fights, and motionless posture within seconds, then sends only high-confidence incidents into the response pipeline.</div>
+        <div class="feat-stat">
+          <span class="feat-stat-dot"></span>
+          <span class="feat-stat-label">Real-time · 30 fps analysis</span>
+        </div>
+      </div>
+
+      <!-- Card 2: Audio Intelligence -->
+      <div class="feat-cell" data-color="cyan">
+        <span class="feat-num">02</span>
+        <div class="feat-graphic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
+            <path d="M19 10v2a7 7 0 01-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </div>
+        <span class="feat-icon">Primary Input</span>
+        <div class="feat-title">Audio Intelligence</div>
+        <div class="feat-desc">Distress calls, impact sounds, and abnormal noise spikes are used as a second signal, helping separate urgent events from ordinary building activity.</div>
+        <div class="feat-stat">
+          <span class="feat-stat-dot"></span>
+          <span class="feat-stat-label">Live · Waveform classification</span>
+        </div>
+      </div>
+
+      <!-- Card 3: Dispatch Decisioning -->
+      <div class="feat-cell" data-color="green">
+        <span class="feat-num">03</span>
+        <div class="feat-graphic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+          </svg>
+        </div>
+        <span class="feat-icon">Response Core</span>
+        <div class="feat-title">Dispatch Decisioning</div>
+        <div class="feat-desc">Severity, unit availability, traffic, trauma level, and hospital capacity are scored together to recommend the fastest viable response path.</div>
+        <div class="feat-stat">
+          <span class="feat-stat-dot"></span>
+          <span class="feat-stat-label">AI-scored · Multi-factor routing</span>
+        </div>
+      </div>
+
+      <!-- Card 4: Privacy Controls -->
+      <div class="feat-cell" data-color="amber">
+        <span class="feat-num">04</span>
+        <div class="feat-graphic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="M9 12l2 2 4-4"/>
+          </svg>
+        </div>
+        <span class="feat-icon">Trust Layer</span>
+        <div class="feat-title">Privacy Controls</div>
+        <div class="feat-desc">Faces are blurred by default, continuous storage is avoided, and encrypted evidence clips are retained only when an incident is confirmed.</div>
+        <div class="feat-stat">
+          <span class="feat-stat-dot"></span>
+          <span class="feat-stat-label">Encrypted · Zero retention default</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SIMULATION -->
+  <section id="simulation" style="padding-top:60px">
+    <div class="section-label">02 — Live Simulation</div>
+    <h2 class="section-title">Real-time <em>dashboard</em></h2>
+
+    <div class="sim-grid">
+      <!-- Camera feed -->
+      <div>
+        <div class="feed-switcher" aria-label="Simulation feed selector">
+          <button class="feed-tab active" type="button" data-feed="feed-1">01 Fall Detection</button>
+          <button class="feed-tab" type="button" data-feed="feed-2">02 Incident Detection</button>
+        </div>
+
+        <div class="cam-container" id="cam-container">
+          <div class="cam-hud-top">
+            <span class="cam-id" id="cam-id">CAM-01 · LOBBY MAIN · BLDG-A</span>
+            <span class="cam-live">
+              <div class="live-dot"></div>LIVE
+            </span>
+          </div>
+
+          <video id="main-video" src="src/output_box_fixed.mp4" autoplay loop muted
+            style="width:100%;height:100%;object-fit:cover;display:block"></video>
+          <div class="blank-feed" id="blank-feed">
+            <div class="blank-feed-copy">
+              <div class="blank-feed-kicker">Audio Demo Slot</div>
+              <div class="blank-feed-title">Video source pending</div>
+              <div class="blank-feed-note">
+                Reserved for the audio-enabled incident clip. Synthetic acoustic and fusion metrics are streaming for
+                presentation testing.
+              </div>
+            </div>
+          </div>
+
+          <svg id="overlay-svg"
+            style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;display:block"
+            viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice">
+            <defs>
+              <marker id="arr" markerWidth="5" markerHeight="5" refX="3" refY="2.5" orient="auto">
+                <path d="M0,0 L5,2.5 L0,5 Z" fill="#9b5de5" />
+              </marker>
+            </defs>
+
+
+            <rect x="0" y="478" width="800" height="22" fill="rgba(0,0,0,0.5)" />
+            <text id="cam-ts" x="10" y="493" font-family="monospace" font-size="8" fill="rgba(156,93,229,0.5)"
+              letter-spacing="1">00:00:00 | OMNIWATCH · CAM-01 · LOBBY</text>
+            <text x="740" y="493" font-family="monospace" font-size="8" fill="rgba(156,93,229,0.25)"
+              letter-spacing="1">4K</text>
+          </svg>
+
+          <div class="cam-hud-bottom">
+            <div class="conf-row">
+              <span class="conf-label">C<sub>fused</sub> = <span id="cf-val">0.00</span></span>
+              <span class="priority-pill ok" id="p-badge">MONITORING</span>
+            </div>
+            <div class="conf-track">
+              <div class="conf-fill" id="conf-fill" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mini cameras -->
+        <div class="mini-row">
+          <div class="mini-cam">
+            <svg width="100%" height="100%" viewBox="0 0 140 105" preserveAspectRatio="xMidYMid slice">
+              <rect width="140" height="105" fill="#060410" />
+              <rect x="35" y="10" width="70" height="72" rx="2" fill="#0a0818" />
+              <line x1="70" y1="10" x2="70" y2="82" stroke="#1a1030" stroke-width="1" />
+              <ellipse cx="70" cy="82" rx="30" ry="8" fill="rgba(108,61,232,0.06)" />
+              <rect width="140" height="105" fill="url(#scl)" opacity="0.2" />
+            </svg>
+            <div class="mini-cam-lbl">CAM-02 · ELEVATOR</div>
+          </div>
+          <div class="mini-cam">
+            <svg width="100%" height="100%" viewBox="0 0 140 105" preserveAspectRatio="xMidYMid slice">
+              <rect width="140" height="105" fill="#060410" />
+              <rect x="0" y="60" width="140" height="45" fill="#090716" />
+              <line x1="70" y1="60" x2="70" y2="105" stroke="#1a1030" stroke-width="1" stroke-dasharray="6,4" />
+              <rect x="6" y="64" width="58" height="37" rx="3" fill="#0c0920" />
+              <rect x="76" y="64" width="58" height="37" rx="3" fill="#0c0920" />
+              <rect width="140" height="105" fill="url(#scl)" opacity="0.2" />
+            </svg>
+            <div class="mini-cam-lbl">CAM-03 · PARKING</div>
+          </div>
+          <div class="mini-cam" style="display:flex;align-items:center;justify-content:center">
+            <canvas id="wave-canvas" style="width:100%;height:60px;display:block"></canvas>
+            <div class="mini-cam-lbl">MIC-01 · AUDIO</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Side panel -->
+      <div class="side-panel">
+
+        <div class="glass glass-panel">
+          <div class="panel-label">Incident State Machine</div>
+          <div class="state-bar" id="state-bar">
+            <div class="state-step" data-idx="0"></div>
+            <div class="state-step" data-idx="1"></div>
+            <div class="state-step" data-idx="2"></div>
+            <div class="state-step" data-idx="3"></div>
+            <div class="state-step" data-idx="4"></div>
+          </div>
+          <div class="state-label" id="state-label">IDLE</div>
+          <div class="state-name" id="state-name">Monitoring all feeds</div>
+        </div>
+
+        <div class="glass glass-panel">
+          <div class="panel-label">Live AI Metrics</div>
+          <div class="metric-grid-2">
+            <div class="metric-chip">
+              <span class="metric-chip-val" id="mv" style="color:#6c3de8">—</span>
+              <span class="metric-chip-key">Vision C<sub>v</sub></span>
+            </div>
+            <div class="metric-chip">
+              <span class="metric-chip-val" id="ma" style="color:#f5c842">—</span>
+              <span class="metric-chip-key">Audio C<sub>a</sub></span>
+            </div>
+            <div class="metric-chip" style="grid-column:1/-1">
+              <span class="metric-chip-val" id="mf" style="color:var(--lavender)">—</span>
+              <span class="metric-chip-key">C<sub>fused</sub> = 0.65·C<sub>v</sub> + 0.35·C<sub>a</sub></span>
+            </div>
+            <div class="metric-chip">
+              <span class="metric-chip-val" id="mp" style="color:var(--cream)">1</span>
+              <span class="metric-chip-key">Persons</span>
+            </div>
+            <div class="metric-chip">
+              <span class="metric-chip-val" id="fps-val" style="color:var(--green-ok)">10</span>
+              <span class="metric-chip-key">Feed FPS</span>
+            </div>
+          </div>
+          <div class="survival-bar-wrap">
+            <div class="survival-labels">
+              <span>Survival P(t)</span>
+              <span id="surv-val">69.8%</span>
+            </div>
+            <div class="survival-track">
+              <div class="survival-fill" id="surv-fill" style="width:69.8%"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass alert-panel" id="alert-panel">
+          <div class="panel-label">Latest Alert</div>
+          <div id="alert-body" style="font-size:12px;color:var(--muted);line-height:1.8">
+            No incidents detected. System monitoring all feeds.
+          </div>
+        </div>
+
+        <div class="glass glass-panel">
+          <div class="panel-label">Gemini 2.0 Flash Output</div>
+          <div id="gemini-out"
+            style="font-size:11px;color:var(--muted);line-height:1.8;font-style:italic;min-height:60px">
+            Awaiting analysis...<span class="gemini-cursor"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAP ROUTING -->
+  <section id="routing" style="padding-top:60px">
+    <div class="section-label">03 — Medical Routing</div>
+    <h2 class="section-title">SF Emergency <em>Network</em></h2>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+      <span
+        style="font-size:8px;letter-spacing:3px;text-transform:uppercase;padding:5px 16px;border-radius:999px;background:rgba(255,51,102,0.1);border:1px solid rgba(255,51,102,0.3);color:#ff3366">●
+        Trauma Level I</span>
+      <span
+        style="font-size:8px;letter-spacing:3px;text-transform:uppercase;padding:5px 16px;border-radius:999px;background:rgba(245,200,66,0.1);border:1px solid rgba(245,200,66,0.3);color:#f5c842">●
+        Trauma Level II</span>
+      <span
+        style="font-size:8px;letter-spacing:3px;text-transform:uppercase;padding:5px 16px;border-radius:999px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--muted)">●
+        Trauma Level III</span>
+      <span
+        style="font-size:8px;letter-spacing:3px;text-transform:uppercase;padding:5px 16px;border-radius:999px;background:rgba(0,255,170,0.08);border:1px solid rgba(0,255,170,0.3);color:var(--green-ok)">●
+        Optimal Route</span>
+    </div>
+
+    <div id="map-wrapper" style="position:relative; display: flex; gap: 4px; height: 60vh; min-height: 500px; border-radius: 16px; overflow: hidden; background: #000; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+      <div id="map-loading">
+        <div class="map-spinner"></div>
+        <span class="map-loading-text">Loading dispatch intelligence...</span>
+      </div>
+      
+      <!-- Dashcam First-Person View -->
+      
+      <!-- Top-Down Overview Radar -->
+      <div id="overview-map" style="flex: 1; height: 100%; border-left: 2px solid rgba(255,255,255,0.05); position: relative;">
+        <div style="position:absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: #00ffaa; font-size: 10px; padding: 4px 8px; border-radius: 4px; z-index: 10; letter-spacing: 2px; text-transform: uppercase;">Drone Overview</div>
+      </div>
+      <div id="map-overlay-panel">
+        <div class="map-overlay-title">Live Dispatch Status</div>
+        <div class="map-overlay-row"><span>Incident</span><span id="map-incident-display">Fall detected · Mission District</span></div>
+        <div class="map-overlay-row"><span>Unit</span><span id="map-status-display" style="color:var(--green-ok)">AMB-04 · Dispatching</span></div>
+        <div class="map-overlay-row"><span>Optimal Hospital</span><span id="map-hospital-display" style="color:var(--green-ok)">Selecting...</span></div>
+        <div class="map-overlay-row"><span>ETA</span><span id="map-eta-display" style="color:var(--green-ok)">Calculating...</span></div>
+        <div class="map-overlay-row"><span>Route Distance</span><span id="map-distance-display">--</span></div>
+        <div class="map-overlay-note" id="map-ai-display">AI triage is scoring trauma level, wait time, capacity, and drive time.</div>
+      </div>
+    </div>
+
+    <div class="hosp-grid" id="hosp-cards"></div>
+  </section>
+
+
+
+  <!-- INCIDENT LOG -->
+  <section style="padding-top:60px">
+    <div class="section-label">04 — Incident Log</div>
+    <h2 class="section-title">Event <em>history</em></h2>
+    <div class="glass" style="padding:0 28px">
+      <div id="log-feed">
+        <div
+          style="padding:40px;text-align:center;font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--dim)">
+          No incidents logged · System monitoring
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TEAM -->
+  <section class="team-section" id="team">
+    <div class="team-orb"></div>
+    <div class="section-label" style="justify-content:center;display:flex">University of Missouri</div>
+    <h2 class="section-title" style="margin-bottom:16px">Built for<br /><em>Claude Hacakthon</em></h2>
+    <p class="team-names">Sanjit</p>
+    <p style="font-size:9px;letter-spacing:4px;text-transform:uppercase;color:var(--dim)">Physical Health</p>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-logo">OMNI<span>WATCH</span></div>
+  </footer>
+
+  <script>
+    // ─────────────────────────────────────────────
+    // AUTH — show user name + handle logout
+    // ─────────────────────────────────────────────
+    const _user = JSON.parse(sessionStorage.getItem('omniwatch_user') || '{}');
+    const navUser = document.getElementById('nav-user');
+    if (navUser && _user.display_name) navUser.textContent = _user.display_name;
+
+    document.getElementById('logout-btn').addEventListener('click', async function (e) {
+      e.preventDefault();
+      const token = sessionStorage.getItem('omniwatch_token');
+      try {
+        await fetch('http://localhost:8000/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+      } catch (_) { /* proceed even if server unreachable */ }
+      sessionStorage.removeItem('omniwatch_token');
+      sessionStorage.removeItem('omniwatch_user');
+      window.location.replace('login.html');
+    });
+
+    // ─────────────────────────────────────────────
+    // CURSOR
+    // ─────────────────────────────────────────────
+    const cur = document.getElementById('cursor');
+    const curRing = document.getElementById('cursor-ring');
+    document.addEventListener('mousemove', e => {
+      cur.style.left = e.clientX + 'px';
+      cur.style.top = e.clientY + 'px';
+      setTimeout(() => {
+        curRing.style.left = e.clientX + 'px';
+        curRing.style.top = e.clientY + 'px';
+      }, 60);
+    });
+
+    // ─────────────────────────────────────────────
+    // CLOCK
+    // ─────────────────────────────────────────────
+    const FEED_CONFIGS = {
+      'feed-1': {
+        camId: 'CAM-01 · LOBBY MAIN · BLDG-A',
+        timestampLabel: 'OMNIWATCH · CAM-01 · LOBBY',
+        stateLabel: 'IDLE',
+        stateName: 'Monitoring all feeds',
+        alertText: 'No incidents detected. System monitoring all feeds.',
+        output: 'Awaiting analysis...<span class="gemini-cursor"></span>',
+        isBlank: false
+      },
+      'feed-2': {
+        camId: 'CAM-02 · AUDIO INCIDENT · BLDG-C',
+        timestampLabel: 'OMNIWATCH · CAM-02 · AUDIO',
+        stateLabel: 'AUDIO',
+        stateName: 'Acoustic incident simulation',
+        alertText: 'Audio-enabled demo feed pending. Synthetic metrics are streaming for the second scenario.',
+        output: 'Audio channel reserved for demo clip. Simulating distress pattern analysis and fusion confidence.',
+        isBlank: true
+      }
+    };
+
+    let activeFeed = 'feed-1';
+
+    function tick() {
+      const t = new Date().toLocaleTimeString('en-US', { hour12: false });
+      const tsEl = document.getElementById('cam-ts');
+      if (tsEl) tsEl.textContent = t + ' | ' + FEED_CONFIGS[activeFeed].timestampLabel;
+    }
+    tick(); setInterval(tick, 1000);
+
+    // ─────────────────────────────────────────────
+    // SIMULATION STATE MACHINE
+    // ─────────────────────────────────────────────
+    const CYCLE = 14000; // 14 seconds video loop
+    const T0 = Date.now();
+    const STATES = ['IDLE', 'ANOMALY', 'DANGER', 'DISPATCHED', 'ARRIVED'];
+    const STATE_LABELS = [
+      'Monitoring all feeds',
+      'Motion anomaly detected',
+      'Fall confirmed — CRITICAL',
+      'Dispatching ambulance',
+      'Ambulance — en route',
+    ];
+
+    let lastCrit = false;
+    let prevGeminiIdx = -1;
+
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
+    const GEMINI_PHRASES = [
+      "Scene analysis: normal pedestrian activity. One person detected, walking toward elevator bay. Gait nominal.",
+      "Motion pattern within expected norms. No anomaly detected. Continuing baseline monitoring.",
+      "Detecting unusual motion signature — subject velocity deviating from baseline. Optical flow energy rising.",
+      "ALERT: Rapid downward motion spike detected in E(t). Subject appears to have collapsed or fallen.",
+      "CRITICAL: Motionless person detected for 4+ seconds post-fall. Bounding box aspect ratio indicates horizontal orientation. Possible cardiac event.",
+      "High-confidence detection: C_fused = 0.916 → CRITICAL. Initiating agentic dispatcher protocol. Routing to nearest Trauma I facility.",
+      "Incident summary generated. UCSF Medical Center selected: 0.8 mi, ETA 4 min (Trauma Level I). Security notified. Ambulance AMB-04 dispatched.",
+    ];
+
+    // DOM refs
+    const confFill = document.getElementById('conf-fill');
+    const cfVal = document.getElementById('cf-val');
+    const pBadge = document.getElementById('p-badge');
+    const mvEl = document.getElementById('mv');
+    const maEl = document.getElementById('ma');
+    const mfEl = document.getElementById('mf');
+    const mpEl = document.getElementById('mp');
+    const fpsEl = document.getElementById('fps-val');
+    const survVal = document.getElementById('surv-val');
+    const survFill = document.getElementById('surv-fill');
+    // const person     = document.getElementById('person');
+    const camCont = document.getElementById('cam-container');
+    const alertPanel = document.getElementById('alert-panel');
+    const alertBody = document.getElementById('alert-body');
+    const geminiOut = document.getElementById('gemini-out');
+    const detGroup = document.getElementById('det-group');
+    const flowGroup = document.getElementById('flow-group');
+    const camIdEl = document.getElementById('cam-id');
+    const blankFeed = document.getElementById('blank-feed');
+    const feedTabs = document.querySelectorAll('[data-feed]');
+    const stateLbl = document.getElementById('state-label');
+    const stateName = document.getElementById('state-name');
+    const stateSteps = document.querySelectorAll('.state-step');
+
+    const videoEl = document.getElementById('main-video');
+
+    videoEl.addEventListener('ended', () => {
+      videoEl.currentTime = 0;
+    });
+
+    const syntheticAudio = {
+      cv: 0.18,
+      ca: 0.42,
+      lastLogAt: 0
+    };
+
+    function randomWalk(value, target, step) {
+      return Math.max(0, Math.min(1, value + (target - value) * 0.08 + (Math.random() - 0.5) * step));
+    }
+
+    function setActiveFeed(feedId) {
+      activeFeed = feedId;
+      const cfg = FEED_CONFIGS[feedId];
+
+      feedTabs.forEach(tab => tab.classList.toggle('active', tab.dataset.feed === feedId));
+      camIdEl.textContent = cfg.camId;
+      camCont.classList.toggle('blank-active', cfg.isBlank);
+      videoEl.style.display = cfg.isBlank ? 'none' : 'block';
+      blankFeed.style.display = cfg.isBlank ? 'flex' : '';
+
+      camCont.classList.remove('alert-state');
+      alertPanel.classList.remove('triggered');
+      alertBody.textContent = cfg.alertText;
+      geminiOut.innerHTML = cfg.output;
+      prevGeminiIdx = -1;
+
+      if (cfg.isBlank) {
+        videoEl.pause();
+      } else {
+        mpEl.textContent = '1';
+        fpsEl.textContent = '10';
+        videoEl.play().catch(() => { });
+      }
+
+      stateLbl.textContent = cfg.stateLabel;
+      stateName.textContent = cfg.stateName;
+      updateStateBar(cfg.isBlank ? 1 : 0, false);
+      tick();
+    }
+
+    feedTabs.forEach(tab => {
+      tab.addEventListener('click', () => setActiveFeed(tab.dataset.feed));
+    });
+
+    function updateSyntheticAudioFeed() {
+      const phase = (Date.now() / 1000) % 12;
+      const audioTarget = phase > 4 && phase < 8 ? 0.82 : 0.46;
+      const visionTarget = phase > 5 && phase < 9 ? 0.34 : 0.18;
+
+      syntheticAudio.ca = randomWalk(syntheticAudio.ca, audioTarget, 0.05);
+      syntheticAudio.cv = randomWalk(syntheticAudio.cv, visionTarget, 0.035);
+
+      const cv = syntheticAudio.cv;
+      const ca = syntheticAudio.ca;
+      const cf = +(0.45 * cv + 0.55 * ca).toFixed(3);
+      const persons = ca > 0.7 ? 2 : 1;
+      const fps = ca > 0.72 ? 24 : 18;
+
+      mvEl.textContent = cv.toFixed(2);
+      maEl.textContent = ca.toFixed(2);
+      mfEl.textContent = cf.toFixed(2);
+      mpEl.textContent = persons;
+      cfVal.textContent = cf.toFixed(2);
+      fpsEl.textContent = fps;
+
+      const survProb = Math.max(48, Math.min(96, 98 - cf * 42 + (Math.random() * 3 - 1.5))).toFixed(1);
+      survVal.textContent = survProb + '%';
+      survFill.style.width = survProb + '%';
+      survFill.style.background = cf > 0.68 ? '#f5c842' : 'var(--green-ok)';
+
+      const barColor = cf > 0.68 ? '#f5c842' : 'var(--green-ok)';
+      confFill.style.width = (cf * 100) + '%';
+      confFill.style.background = barColor;
+      pBadge.textContent = cf > 0.68 ? 'AUDIO REVIEW' : 'MONITORING';
+      pBadge.className = 'priority-pill ' + (cf > 0.68 ? 'warn' : 'ok');
+
+      const stateIdx = cf > 0.68 ? 2 : 1;
+      updateStateBar(stateIdx, false);
+      stateLbl.textContent = cf > 0.68 ? 'REVIEW' : 'AUDIO';
+      stateName.textContent = cf > 0.68 ? 'Distress signature under review' : 'Acoustic incident simulation';
+
+      alertBody.innerHTML = `
+        <span style="color:#f5c842;font-weight:700;font-size:10px;letter-spacing:2px">AUDIO SCENARIO · STAGED</span><br/>
+        <span style="color:var(--dim)">CAM-02 · Audio Incident · ${new Date().toLocaleTimeString()}</span><br/><br/>
+        Demo slot ready for an audio-enabled clip. Current values are generated test signals.<br/>
+        Audio confidence C<sub>a</sub> = ${ca.toFixed(2)}
+      `;
+
+      if (Date.now() - syntheticAudio.lastLogAt > 9000 && cf > 0.68) {
+        logEvent('MEDIUM', 'Synthetic audio spike queued for review', 'CAM-02');
+        syntheticAudio.lastLogAt = Date.now();
+      }
+    }
+
+    function updateStateBar(idx, isCrit) {
+      stateSteps.forEach((s, i) => {
+        s.classList.remove('active', 'done', 'crit');
+        if (i < idx) s.classList.add(isCrit ? 'crit' : 'done');
+        if (i === idx) s.classList.add(isCrit ? 'crit' : 'active');
+      });
+      stateLbl.textContent = STATES[idx];
+      stateName.textContent = STATE_LABELS[idx];
+    }
+
+    // Gemini typewriter
+    let typeTarget = '';
+    let typeBuffer = '';
+    let typeTimer = null;
+
+    function typewriterSet(text) {
+      if (text === typeTarget) return;
+      typeTarget = text;
+      typeBuffer = '';
+      clearInterval(typeTimer);
+      const cursor = '<span class="gemini-cursor"></span>';
+      typeTimer = setInterval(() => {
+        if (typeBuffer.length < typeTarget.length) {
+          typeBuffer = typeTarget.slice(0, typeBuffer.length + 1);
+          geminiOut.innerHTML = typeBuffer + cursor;
+        } else {
+          clearInterval(typeTimer);
+        }
+      }, 22);
+    }
+
+    function smoothNoise(t, scale = 0.02) {
+      return Math.sin(t * 2 * Math.PI) * scale;
+    }
+
+    function getConfidenceValues(tSec) {
+      let cv, ca;
+
+      // normalize time (0 → 1 across 14s)
+      const t = tSec / 14;
+
+      // base smooth progression curve
+      // slow rise → faster rise → plateau
+      let base;
+
+      if (tSec < 6) {
+        // gradual linear rise (movement phase)
+        base = lerp(0.05, 0.4, tSec / 6);
+      }
+      else if (tSec < 10) {
+        // steeper rise (fall detection)
+        base = lerp(0.4, 0.9, (tSec - 6) / 4);
+      }
+      else {
+        // HOLD high (no drop before loop reset)
+        base = 0.9;
+      }
+
+      // apply SMALL smooth variation (not random jumps)
+      const noise = smoothNoise(tSec * 0.5, 0.015);
+
+      cv = base + noise;
+      ca = base + smoothNoise(tSec * 0.7, 0.02);
+
+      return {
+        cv: Math.max(0, Math.min(1, cv)),
+        ca: Math.max(0, Math.min(1, ca))
+      };
+    }
+
+    let prevCv = 0;
+    let prevCa = 0;
+    let lastTime = 0;
+    // Main sim loop
+    function simLoop() {
+      if (activeFeed === 'feed-2') {
+        updateSyntheticAudioFeed();
+        return;
+      }
+
+      const video = document.getElementById('main-video');
+      const elapsed = video.currentTime * 1000; // ms
+      const currentTime = video.currentTime;
+
+      // detect loop (video jumped back)
+      if (currentTime < lastTime) {
+        prevCv = 0;
+        prevCa = 0;
+      }
+
+      lastTime = currentTime;
+      const p = elapsed / CYCLE;
+
+      let persons, stateIdx, geminiIdx;
+      const tSec = elapsed / 1000;
+
+      const raw = getConfidenceValues(tSec);
+
+      // exponential smoothing (VERY important)
+      const alpha = 0.15;
+
+      const cv = prevCv + alpha * (raw.cv - prevCv);
+      const ca = prevCa + alpha * (raw.ca - prevCa);
+
+      prevCv = cv;
+      prevCa = ca;
+      const cf = +(0.65 * cv + 0.35 * ca).toFixed(3);
+
+
+      // cv = Math.max(0, Math.min(1, cv));
+      // ca = Math.max(0, Math.min(1, ca));
+
+      mvEl.textContent = cv.toFixed(2);
+      maEl.textContent = ca.toFixed(2);
+      mfEl.textContent = cf.toFixed(2);
+      cfVal.textContent = cf.toFixed(2);
+
+      const tMinutes = (stateIdx >= 2 && p >= 0.5) ? (p - 0.5) * 14 / 60 : 0;
+
+      let survProb = (100 - cf * 60) + (Math.random() * 4 - 2);
+      survProb = Math.max(0, Math.min(100, survProb)).toFixed(1);
+
+      survVal.textContent = survProb + '%';
+      survFill.style.width = survProb + '%';
+
+      let survColor = 'var(--green-ok)';
+      if (survProb < 80) survColor = '#f5c842';
+      if (survProb < 60) survColor = 'var(--red-alert)';
+      survFill.style.background = survColor;
+
+      let barColor = 'var(--green-ok)', priority = 'MONITORING', bClass = 'ok';
+      if (cf >= 0.85) { barColor = 'var(--red-alert)'; priority = 'CRITICAL'; bClass = 'crit'; }
+      else if (cf >= 0.65) { barColor = '#fb923c'; priority = 'HIGH'; bClass = 'warn'; }
+      else if (cf >= 0.45) { barColor = '#f5c842'; priority = 'MEDIUM'; bClass = 'warn'; }
+      else if (cf >= 0.25) { priority = 'LOW'; }
+
+      confFill.style.width = (cf * 100) + '%';
+      confFill.style.background = barColor;
+      pBadge.textContent = priority;
+      pBadge.className = 'priority-pill ' + bClass;
+
+      if (cf < 0.3) { stateIdx = 0; geminiIdx = 0; }
+      else if (cf < 0.6) { stateIdx = 1; geminiIdx = 2; }
+      else if (cf < 0.85) { stateIdx = 2; geminiIdx = 3; }
+      else { stateIdx = 3; geminiIdx = 5; }
+
+      updateStateBar(stateIdx, cf >= 0.85);
+      const isCriticalWindow = (p >= 0.5 && p < 0.7857);
+      if (cf >= 0.85) {
+        camCont.classList.add('alert-state');
+        alertPanel.classList.add('triggered');
+        alertBody.innerHTML = `
+      <span style="color:var(--red-alert);font-weight:700;font-size:10px;letter-spacing:2px">⚠ CRITICAL — FALL DETECTED</span><br/>
+      <span style="color:var(--dim)">CAM-01 · Lobby Main · ${new Date().toLocaleTimeString()}</span><br/><br/>
+      Person motionless. Possible cardiac event.<br/>
+      C<sub>fused</sub> = ${cf} → CRITICAL<br/><br/>
+      <span style="color:var(--green-ok)">→ UCSF Medical · 0.8 mi · ETA 4 min (Trauma I)</span>
+    `;
+        if (!lastCrit) {
+          logEvent('CRITICAL', 'Fall detected — person motionless on lobby floor', 'CAM-01');
+          lastCrit = true;
+        }
+      } else {
+        camCont.classList.remove('alert-state');
+        alertPanel.classList.remove('triggered');
+
+        if (p < 0.5) {
+          alertBody.textContent = 'No incidents detected. System monitoring all feeds.';
+        }
+      }
+
+      if (geminiIdx !== prevGeminiIdx) {
+        typewriterSet(GEMINI_PHRASES[Math.min(geminiIdx, GEMINI_PHRASES.length - 1)]);
+        prevGeminiIdx = geminiIdx;
+      }
+    }
+    setActiveFeed('feed-1');
+    setInterval(simLoop, 200);
+
+    // ─────────────────────────────────────────────
+    // AUDIO WAVEFORM
+    // ─────────────────────────────────────────────
+    const waveCanvas = document.getElementById('wave-canvas');
+    const wCtx = waveCanvas.getContext('2d');
+    function resizeWave() { waveCanvas.width = waveCanvas.offsetWidth * 2; waveCanvas.height = 60; }
+    resizeWave();
+    window.addEventListener('resize', resizeWave);
+
+    function drawWave() {
+      const W = waveCanvas.width, H = waveCanvas.height;
+      const p = ((Date.now() - T0) % CYCLE) / CYCLE;
+      const amp = (p > 0.19 && p < 0.78) ? H * 0.38 : H * 0.06;
+      const col = (p > 0.44 && p < 0.78) ? 'rgba(255,51,102,' : 'rgba(156,93,229,';
+      wCtx.clearRect(0, 0, W, H);
+      wCtx.strokeStyle = col + '0.2)';
+      wCtx.lineWidth = 4;
+      wCtx.beginPath();
+      for (let x = 0; x < W; x++) {
+        const y = H / 2 + amp * Math.sin((x / W) * Math.PI * 18 + Date.now() / 160) * (0.6 + 0.4 * Math.random());
+        x === 0 ? wCtx.moveTo(x, y) : wCtx.lineTo(x, y);
+      }
+      wCtx.stroke();
+      wCtx.strokeStyle = col + '0.8)';
+      wCtx.lineWidth = 1.5;
+      wCtx.beginPath();
+      for (let x = 0; x < W; x++) {
+        const y = H / 2 + amp * Math.sin((x / W) * Math.PI * 18 + Date.now() / 160) * (0.6 + 0.4 * Math.random());
+        x === 0 ? wCtx.moveTo(x, y) : wCtx.lineTo(x, y);
+      }
+      wCtx.stroke();
+      requestAnimationFrame(drawWave);
+    }
+    drawWave();
+
+    // ─────────────────────────────────────────────
+    // INCIDENT LOG
+    // ─────────────────────────────────────────────
+    const logFeed = document.getElementById('log-feed');
+    let logEmpty = true;
+
+    function logEvent(sev, desc, cam, time, service = 'system') {
+      if (logEmpty) { logFeed.innerHTML = ''; logEmpty = false; }
+      const colors = { CRITICAL: 'var(--red-alert)', HIGH: '#fb923c', MEDIUM: '#f5c842', LOW: 'var(--green-ok)' };
+      const pillCls = { CRITICAL: 'crit', HIGH: 'warn', MEDIUM: 'warn', LOW: 'ok' };
+      const serviceLabels = { medical: 'EMS', police: 'Police', system: 'System' };
+      const row = document.createElement('div');
+      row.className = `log-row ${service}`;
+      row.innerHTML = `
+    <div class="log-sev" style="background:${colors[sev]}"></div>
+    <div class="log-time">${time || new Date().toLocaleTimeString('en-US', { hour12: false })}</div>
+    <div class="log-desc">
+      <span class="log-service ${service}">${serviceLabels[service] || 'System'}</span>
+      <span class="priority-pill ${pillCls[sev]}" style="font-size:7px;margin-right:8px">${sev}</span>${desc}
+    </div>
+    <div class="log-cam">${cam}</div>
+  `;
+      logFeed.insertBefore(row, logFeed.firstChild);
+      while (logFeed.children.length > 14) logFeed.removeChild(logFeed.lastChild);
+    }
+
+    // ── Initial seeded logs ──
+[
+  ['LOW',      'System heartbeat nominal · 12 camera feeds online',           'SYS-CORE',    '20:58:10', 'system'],
+  ['MEDIUM',   'Crowd density elevated near north entrance',                  'CAM-03',      '20:59:42', 'system'],
+  ['LOW',      'Audio classifier detected raised voices · no distress keywords', 'MIC-02',  '21:01:18', 'system'],
+  ['HIGH',     'Slip risk detected near lobby floor marker',                  'CAM-01',      '21:03:27', 'system'],
+  ['CRITICAL', 'Fall posture confirmed · person remains motionless',          'CAM-01',      '21:04:09', 'medical'],
+  ['HIGH',     'AMB-04 assigned to Mission District fall response',           'AMB-04',      '21:04:22', 'medical'],
+  ['MEDIUM',   'UCSF Medical Center selected · Trauma I capacity available',  'ROUTE-AI',    '21:04:35', 'medical'],
+  ['MEDIUM',   'Outer Richmond welfare-check route opened from Park Station', 'SFPD-PARK',   '21:05:08', 'police'],
+  ['HIGH',     'North Beach restaurant disturbance · Central unit dispatched','SFPD-CENTRAL','21:05:31', 'police'],
+  ['MEDIUM',   'Golden Gate Park safety response · Richmond unit en route',   'SFPD-RICH',   '21:05:54', 'police'],
+  ['HIGH',     'Secondary ambulance staged for Marina stroke symptoms',       'AMB-12',      '21:06:18', 'medical'],
+  ['MEDIUM',   'CPMC Van Ness route selected for secondary medical case',     'ROUTE-B',     '21:06:41', 'medical'],
+  ['LOW',      'Police perimeter advisory synced to overview map',            'SFPD-CMD',    '21:07:05', 'police'],
+  ['MEDIUM',   'Additional ALS backup unit placed on standby',                'AMB-09',      '21:07:29', 'medical'],
+].forEach(([sev, desc, cam, time, service]) => logEvent(sev, desc, cam, time, service));
+
+// ── Live rolling log events 
+const LIVE_LOG_EVENTS = [
+  ['HIGH',     'AMB-04 en route · 3 min 20s to scene · Guerrero St corridor', 'AMB-04',     null, 'medical'],
+  ['MEDIUM',   'CAM-01 optical flow energy stabilising · person still motionless', 'CAM-01', null, 'system'],
+  ['LOW',      'UCSF Trauma I bay pre-alerted · team standing by',            'UCSF-ER',     null, 'medical'],
+  ['HIGH',     'AMB-04 en route · 2 min 40s to scene',                        'AMB-04',     null, 'medical'],
+  ['LOW',      'Building security acknowledging dispatch · lobby cleared',     'SEC-OPS',     null, 'system'],
+  ['MEDIUM',   'C_fused = 0.916 sustained · CRITICAL classification held',    'AI-ENGINE',   null, 'system'],
+  ['HIGH',     'AMB-04 en route · 2 min 00s to scene · Mission St',           'AMB-04',     null, 'medical'],
+  ['LOW',      'Gemini 2.0 Flash generating incident summary report',          'AI-ENGINE',   null, 'system'],
+  ['MEDIUM',   'Secondary unit AMB-09 moved to hot standby · Valencia St',    'AMB-09',     null, 'medical'],
+  ['HIGH',     'AMB-04 en route · 1 min 20s to scene · approaching Valencia', 'AMB-04',     null, 'medical'],
+  ['LOW',      'Lobby camera gimbal auto-tracking motionless subject',         'CAM-01',     null, 'system'],
+  ['HIGH',     'AMB-04 approaching · 40s · turning onto Mission St',          'AMB-04',     null, 'medical'],
+  ['CRITICAL', 'AMB-04 on scene · paramedics deploying',                      'AMB-04',     null, 'medical'],
+  ['MEDIUM',   'Patient vitals relay initiated · UCSF ER receiving data',     'UCSF-ER',    null, 'medical'],
+  ['LOW',      'Incident clip encrypted and archived · ref OW-2026-0502',     'SYS-CORE',   null, 'system'],
+  ['MEDIUM',   'Scene cleared · secondary units standing down',               'SFPD-CMD',   null, 'police'],
+  ['LOW',      'System returning to baseline monitoring · all feeds nominal',  'SYS-CORE',   null, 'system'],
+  ['LOW',      'AI self-check complete · detection thresholds nominal',        'AI-ENGINE',  null, 'system'],
+];
+
+let liveLogIdx = 0;
+setInterval(() => {
+  const evt = LIVE_LOG_EVENTS[liveLogIdx % LIVE_LOG_EVENTS.length];
+  logEvent(...evt);
+  liveLogIdx++;
+}, 4000);
+
+    // ─────────────────────────────────────────────
+    // HOSPITAL DATA
+    // ─────────────────────────────────────────────
+    const HOSPITALS = [
+      { name: 'UCSF Medical Center', lat: 37.7631, lon: -122.4576, trauma: 1, eta: 4, optimal: true },
+      { name: 'Zuckerberg SF General', lat: 37.7555, lon: -122.4052, trauma: 1, eta: 7, optimal: false },
+      { name: "St. Mary's Medical", lat: 37.7776, lon: -122.4484, trauma: 2, eta: 6, optimal: false },
+      { name: 'California Pacific', lat: 37.7851, lon: -122.4378, trauma: 2, eta: 5, optimal: false },
+      { name: 'Kaiser Permanente SF', lat: 37.7802, lon: -122.4425, trauma: 2, eta: 5, optimal: false },
+      { name: 'Saint Francis Memorial', lat: 37.7931, lon: -122.4148, trauma: 2, eta: 4, optimal: false },
+      { name: 'Chinese Hospital SF', lat: 37.7956, lon: -122.4068, trauma: 3, eta: 4, optimal: false },
+      { name: 'Dignity Health St. Luke', lat: 37.7585, lon: -122.4132, trauma: 3, eta: 6, optimal: false },
+    ];
+    const INC = { lat: 37.7850, lon: -122.4100 };
+
+
+// ─────────────────────────────────────────────
+// LEAFLET MAP 
+// ─────────────────────────────────────────────
+const map = L.map('overview-map', { zoomControl: true }).setView([37.771, -122.432], 13);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap © CARTO',
+  subdomains: 'abcd', maxZoom: 19
+}).addTo(map);
+
+document.getElementById('map-loading').style.display = 'none';
+
+// ── Real road route via OSRM ──
+let ROUTE_COORDS = [
+  [37.7631, -122.4576],
+  [37.7850, -122.4100]
+]; // fallback until OSRM responds
+
+let SEG_LENS = [], TOTAL_LEN = 0;
+
+function segLen(a, b) {
+  const R = 6371000;
+  const dLat = (b[0]-a[0])*Math.PI/180, dLon = (b[1]-a[1])*Math.PI/180;
+  const s = Math.sin(dLat/2)**2 + Math.cos(a[0]*Math.PI/180)*Math.cos(b[0]*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1-s));
+}
+
+function rebuildSegments() {
+  SEG_LENS = ROUTE_COORDS.slice(0,-1).map((c,i) => segLen(c, ROUTE_COORDS[i+1]));
+  TOTAL_LEN = SEG_LENS.reduce((a,b) => a+b, 0);
+}
+rebuildSegments();
+
+async function fetchOSRMRoute() {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/-122.4576,37.7631;-122.4100,37.7850?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.routes?.[0]) {
+      ROUTE_COORDS = data.routes[0].geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+      traveledLine.setLatLngs([]);
+      remainingLine.setLatLngs(ROUTE_COORDS);
+      rebuildSegments();
+    }
+  } catch(e) { console.warn('OSRM unavailable, using fallback'); }
+}
+fetchOSRMRoute();
+
+// ── Traveled + Remaining polylines ──
+const traveledLine = L.polyline([], {
+  color: '#00ffaa', weight: 5, opacity: 0.95
+}).addTo(map);
+
+const remainingLine = L.polyline(ROUTE_COORDS, {
+  color: '#00ffaa', weight: 3, opacity: 0.35, dashArray: '6 8'
+}).addTo(map);
+
+// ── Hospital markers ──
+HOSPITALS.forEach(h => {
+  const col = h.optimal ? '#00ffaa' : h.trauma === 1 ? '#ff3366' : '#f5c842';
+  const html = `<div style="
+    width:${h.optimal ? 14 : 10}px;height:${h.optimal ? 14 : 10}px;
+    border-radius:50%;background:${col};
+    border:2px solid rgba(255,255,255,0.6);
+    box-shadow:0 0 ${h.optimal ? 16 : 8}px ${col}88;
+  "></div>`;
+  L.marker([h.lat, h.lon], {
+    icon: L.divIcon({ className:'', html, iconSize:[14,14], iconAnchor:[7,7] })
+  }).addTo(map).bindPopup(`<b>${h.name}</b><br>Trauma ${h.trauma} · ETA ${h.eta} min`);
+});
+
+// ── Pulsing incident marker ──
+const incIcon = L.divIcon({
+  className: '',
+  html: `<div style="position:relative;width:22px;height:22px">
+    <div style="position:absolute;inset:0;border-radius:50%;background:rgba(255,51,102,0.25);animation:inc-ring 1.6s ease-out infinite"></div>
+    <div style="position:absolute;inset:4px;border-radius:50%;background:#ff3366;border:2px solid #fff;box-shadow:0 0 12px #ff3366"></div>
+  </div>
+  <style>@keyframes inc-ring{0%{transform:scale(1);opacity:.8}100%{transform:scale(2.4);opacity:0}}</style>`,
+  iconSize:[22,22], iconAnchor:[11,11]
+});
+L.marker([INC.lat, INC.lon], { icon: incIcon })
+  .addTo(map)
+  .bindPopup('<b style="color:#ff3366">⚠ INCIDENT</b><br>Fall detected · Mission District');
+
+// ── Ambulance marker ──
+function makeAmbIcon(bearing) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:22px;height:22px;border-radius:50%;
+      background:#00ffaa;border:2px solid #fff;
+      box-shadow:0 0 16px rgba(0,255,170,0.9),0 0 4px rgba(0,0,0,0.4);
+      display:flex;align-items:center;justify-content:center;
+      transform:rotate(${bearing}deg);font-size:11px;line-height:1;
+    ">🚑</div>`,
+    iconSize:[22,22], iconAnchor:[11,11]
+  });
+}
+
+function getBearing(a, b) {
+  const dLon = (b[1]-a[1])*Math.PI/180;
+  const lat1 = a[0]*Math.PI/180, lat2 = b[0]*Math.PI/180;
+  const y = Math.sin(dLon)*Math.cos(lat2);
+  const x = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon);
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+
+const ambMarker = L.marker(ROUTE_COORDS[0], {
+  icon: makeAmbIcon(90), zIndexOffset: 1000
+}).addTo(map);
+
+function getPosAndBearing(progress) {
+  const target = progress * TOTAL_LEN;
+  let dist = 0;
+  for (let i = 0; i < SEG_LENS.length; i++) {
+    if (dist + SEG_LENS[i] >= target) {
+      const frac = (target - dist) / SEG_LENS[i];
+      const a = ROUTE_COORDS[i], b = ROUTE_COORDS[i+1];
+      return {
+        pos: [a[0]+(b[0]-a[0])*frac, a[1]+(b[1]-a[1])*frac],
+        bearing: getBearing(a, b),
+        segIdx: i
+      };
+    }
+    dist += SEG_LENS[i];
+  }
+  return { pos: ROUTE_COORDS[ROUTE_COORDS.length-1], bearing: 0, segIdx: SEG_LENS.length-1 };
+}
+
+// ── Overlay panel elements ──
+const mapStatusEl   = document.getElementById('map-status-display');
+const mapHospitalEl = document.getElementById('map-hospital-display');
+const mapEtaEl      = document.getElementById('map-eta-display');
+const mapDistEl     = document.getElementById('map-distance-display');
+const mapAiEl       = document.getElementById('map-ai-display');
+
+const LOOP_MS = 12000; // 12s loop
+let ambStart = Date.now();
+let lastBearing = 90;
+
+function animateAmb() {
+  const elapsed = (Date.now() - ambStart) % LOOP_MS;
+  const progress = elapsed / LOOP_MS;
+
+  // Reset traveled line on loop
+  if (elapsed < 50) {
+    traveledLine.setLatLngs([]);
+    remainingLine.setLatLngs(ROUTE_COORDS);
+  }
+
+  const { pos, bearing, segIdx } = getPosAndBearing(progress);
+
+  // Smooth bearing
+  lastBearing = lastBearing + ((bearing - lastBearing + 540) % 360 - 180) * 0.25;
+  ambMarker.setLatLng(pos);
+  ambMarker.setIcon(makeAmbIcon(Math.round(lastBearing)));
+
+  // Update traveled/remaining lines
+  const traveled = ROUTE_COORDS.slice(0, segIdx + 2);
+  traveled[traveled.length - 1] = pos;
+  traveledLine.setLatLngs(traveled);
+  const remaining = [pos, ...ROUTE_COORDS.slice(segIdx + 1)];
+  remainingLine.setLatLngs(remaining);
+
+  // Overlay panel
+  const etaSec = Math.round((1 - progress) * 240); // 4 min total
+  const distMi = ((1 - progress) * 0.8).toFixed(1);
+  let status, ai;
+  if (progress < 0.08) {
+    status = '<span style="color:#f5c842">AMB-04 · Dispatching</span>';
+    ai = 'AI selected UCSF Medical (Trauma I) — optimal route calculated.';
+  } else if (progress < 0.85) {
+    const mm = Math.floor(etaSec/60), ss = String(etaSec%60).padStart(2,'0');
+    status = `<span style="color:#00ffaa">AMB-04 · En Route</span>`;
+    ai = `ETA ${mm}:${ss} · Unit approaching Mission District via Guerrero St.`;
+  } else if (progress < 0.95) {
+    status = `<span style="color:#00ffaa">AMB-04 · Approaching</span>`;
+    ai = 'Unit 100m from scene. Security notified to clear lobby entrance.';
+  } else {
+    status = `<span style="color:#00ffaa">AMB-04 · On Scene ✓</span>`;
+    ai = 'Ambulance on scene. Patient handoff to paramedics initiated.';
+  }
+
+  if (mapStatusEl)   mapStatusEl.innerHTML  = status;
+  if (mapHospitalEl) mapHospitalEl.textContent = 'UCSF Medical Center';
+  if (mapEtaEl)      mapEtaEl.textContent   = progress > 0.95 ? 'On scene' : `${Math.ceil(etaSec/60)} min ${etaSec%60}s`;
+  if (mapDistEl)     mapDistEl.textContent  = progress > 0.95 ? '0.0 mi' : distMi + ' mi';
+  if (mapAiEl)       mapAiEl.textContent    = ai;
+
+  requestAnimationFrame(animateAmb);
+}
+
+setTimeout(() => { map.invalidateSize(); animateAmb(); }, 150);
+
+    
+
+    // ─────────────────────────────────────────────
+    // HOSPITAL CARDS
+    // ─────────────────────────────────────────────
+    const hospCards = document.getElementById('hosp-cards');
+    HOSPITALS.slice(0, 4).forEach(h => {
+      const col = h.optimal ? 'var(--green-ok)' : h.trauma === 1 ? 'var(--red-alert)' : '#f5c842';
+      const tlbl = ['', 'Trauma I', 'Trauma II', 'Trauma III'][h.trauma];
+      const div = document.createElement('div');
+      div.className = 'glass hosp-card' + (h.optimal ? ' optimal' : '');
+      div.innerHTML = `
+    <span class="hosp-tag" style="color:${col};border-color:${col}">${tlbl}${h.optimal ? ' · ★ OPTIMAL' : ''}</span>
+    <div class="hosp-name">${h.name}</div>
+    <span class="hosp-eta" style="color:${col}" data-hospital-eta="${h.name}" data-base-eta="${h.eta}" data-optimal="${h.optimal}">
+      <span class="hosp-eta-value">${h.eta}</span><span style="font-size:1.2rem"> min</span>
+    </span>
+    <div class="hosp-meta">${h.lat.toFixed(4)}°N · ${Math.abs(h.lon).toFixed(4)}°W</div>
+  `;
+      hospCards.appendChild(div);
+    });
+  </script>
+  <script src="src/omni-api.js"></script>
+  <script>
+    (function connectIndexToBackend() {
+      if (!window.OmniWatchAPI) return;
+
+      function sevToLog(severity) {
+        const sev = String(severity || 'LOW').toUpperCase();
+        return ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(sev) ? sev : 'LOW';
+      }
+
+      function serviceType(service) {
+        const value = String(service || 'system').toLowerCase();
+        if (value.includes('police') || value.includes('sfpd')) return 'police';
+        if (value.includes('medical') || value.includes('ems') || value.includes('amb')) return 'medical';
+        return 'system';
+      }
+
+      function applyBackendAnalysis(payload) {
+        if (!payload?.incident || !payload?.fusion) return;
+        const incident = payload.incident;
+        const fusion = payload.fusion;
+        const dispatch = payload.dispatch || {};
+        const hospital = dispatch.hospital || {};
+        const severity = sevToLog(incident.severity || fusion.priority);
+
+        const mv = document.getElementById('mv');
+        const ma = document.getElementById('ma');
+        const mf = document.getElementById('mf');
+        const cf = document.getElementById('cf-val');
+        const pBadge = document.getElementById('p-badge');
+        const alertPanel = document.getElementById('alert-panel');
+        const alertBody = document.getElementById('alert-body');
+        const geminiOut = document.getElementById('gemini-out');
+        const camCont = document.getElementById('cam-container');
+
+        if (mv) mv.textContent = Number(fusion.c_vision || 0).toFixed(2);
+        if (ma) ma.textContent = Number(fusion.c_audio || 0).toFixed(2);
+        if (mf) mf.textContent = Number(fusion.c_fused || 0).toFixed(2);
+        if (cf) cf.textContent = Number(fusion.c_fused || 0).toFixed(2);
+        if (pBadge) {
+          pBadge.textContent = severity;
+          pBadge.className = 'priority-pill ' + (severity === 'CRITICAL' ? 'crit' : severity === 'LOW' ? 'ok' : 'warn');
+        }
+        if (alertPanel) alertPanel.classList.toggle('triggered', severity === 'CRITICAL');
+        if (camCont) camCont.classList.toggle('alert-state', severity === 'CRITICAL');
+        if (alertBody) {
+          alertBody.innerHTML = `
+            <span style="color:var(--red-alert);font-weight:700;font-size:10px;letter-spacing:2px">${severity} · ${incident.event_type?.replace(/_/g, ' ') || 'incident'}</span><br/>
+            <span style="color:var(--dim)">${incident.camera_id || 'CAM-01'} · Backend analysis · ${new Date().toLocaleTimeString()}</span><br/><br/>
+            ${incident.summary || 'Backend incident analysis received.'}<br/><br/>
+            <span style="color:var(--green-ok)">→ ${hospital.name || 'Recommended hospital'} · ${dispatch.eta_seconds ? Math.ceil(dispatch.eta_seconds / 60) + ' min' : 'ETA pending'}</span>
+          `;
+        }
+        if (geminiOut) {
+          geminiOut.innerHTML = `${incident.summary || 'Backend analysis received.'}<span class="gemini-cursor"></span>`;
+        }
+        if (typeof window.startDispatchDemo === 'function') window.startDispatchDemo();
+      }
+
+      async function hydrateIndex() {
+        try {
+          const [stats, incidents] = await Promise.all([
+            window.OmniWatchAPI.stats(),
+            window.OmniWatchAPI.incidents(8)
+          ]);
+
+          const fps = document.getElementById('fps-val');
+          const mp = document.getElementById('mp');
+          if (fps) fps.textContent = '10';
+          if (mp) mp.textContent = stats.persons_detected || 1;
+
+          if (Array.isArray(incidents.incidents) && typeof logEvent === 'function') {
+            incidents.incidents.slice().reverse().forEach(event => {
+              logEvent(
+                sevToLog(event.severity),
+                event.description,
+                event.camera_id || 'BACKEND',
+                event.timestamp,
+                serviceType(event.service)
+              );
+            });
+          }
+        } catch (err) {
+          console.warn('[OmniWatch] Backend unavailable on index page, keeping local demo mode.', err);
+        }
+
+        window.OmniWatchAPI.connectAlerts(message => {
+          if (message.type === 'analysis_result') {
+            applyBackendAnalysis(message);
+            if (typeof logEvent === 'function') {
+              logEvent('CRITICAL', 'Live backend alert received · dispatch route refreshed', 'BACKEND', null, 'medical');
+            }
+          }
+          if (message.type === 'dispatch_update' && typeof logEvent === 'function') {
+            logEvent('HIGH', message.event?.description || 'Backend dispatch update received', message.event?.camera_id || 'DISPATCH', null, 'medical');
+          }
+        });
+      }
+
+      hydrateIndex();
+    })();
+  const tabs = document.querySelectorAll(".feed-tab");
+  const video = document.getElementById("main-video");
+
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      // Remove active state from all tabs
+      tabs.forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+
+      const feed = tab.getAttribute("data-feed");
+
+      if (feed === "feed-1") {
+        // Fall Detection video
+        video.src = "src/output_box_fixed.mp4";
+        video.style.display = "block";
+        blankFeed.style.display = "none";
+        video.play();
+      } else if (feed === "feed-2") {
+        // Incident Detection video
+        video.src = "src/incident-foot.mp4";
+        video.style.display = "block";
+        blankFeed.style.display = "none";
+        video.play();
+      }
+    });
+  });
+  </script>
+  
+</body>
+
+</html>

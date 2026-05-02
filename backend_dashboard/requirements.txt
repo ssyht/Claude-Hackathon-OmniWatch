@@ -1,0 +1,9 @@
+opencv-python
+google-cloud-vision
+google-cloud-speech
+pydub
+google-generativeai
+python-dotenv
+fastapi
+uvicorn[standard]
+google-cloud-aiplatform

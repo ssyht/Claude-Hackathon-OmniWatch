@@ -1,0 +1,256 @@
+from google.oauth2 import service_account
+import vertexai
+from vertexai.generative_models import GenerativeModel, Part
+import cv2
+import numpy as np
+import time
+
+credentials = service_account.Credentials.from_service_account_file(
+    "devfest-project-493021-dc90084fc0e8.json"
+)
+
+vertexai.init(
+    project="devfest-project-493021",
+    location="us-central1",
+    credentials=credentials
+)
+
+model = GenerativeModel(
+    "gemini-2.5-pro",
+    generation_config={
+        "max_output_tokens": 500,
+        "temperature": 0.1,
+    }
+)
+
+critical_count = 0
+clear_count = 0
+emergency_active = False
+prev_gray = None
+
+
+def detect_sudden_motion(frame):
+    global prev_gray
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    gray = cv2.GaussianBlur(gray, (21, 21), 0)
+    if prev_gray is None:
+        prev_gray = gray
+        return False, 0
+    flow = cv2.calcOpticalFlowFarneback(prev_gray, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+    prev_gray = gray
+    vx = flow[..., 0]
+    vy = flow[..., 1]
+    magnitude = np.sqrt(vx**2 + vy**2)
+    mean_energy = np.mean(magnitude)
+    max_energy = np.max(magnitude)
+    downward = np.mean(vy[vy > 0]) if np.any(vy > 0) else 0
+    if mean_energy > 3.0 and max_energy > 15.0 and downward > 2.0:
+        return True, mean_energy
+    return False, mean_energy
+
+def analyze_situation(labels, audio_text, frame=None, sudden_fall=False):
+    global critical_count, clear_count, emergency_active
+
+    prompt = """You are an expert AI security camera emergency detection system deployed in a public building (office, lab, school, hospital corridor, lobby).
+
+Your ONLY job is to detect genuine medical emergencies or violence. Be precise. Avoid false alarms.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1: PERSON POSTURE ANALYSIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+First identify the person's posture:
+
+UPRIGHT POSTURES (never emergency):
+- Standing still
+- Walking or running
+- Bending forward at waist (picking something up)
+- Crouching or squatting briefly
+- Leaning against wall consciously
+
+SEATED POSTURES (never emergency):
+- Sitting in office chair at desk
+- Sitting on couch or sofa
+- Sitting on bench
+- Reclining in chair
+- Sitting cross-legged on floor alert and conscious
+
+HORIZONTAL POSTURES (analyze carefully):
+- Lying on bed → CLEAR (intentional sleep/rest)
+- Lying on couch/sofa → CLEAR (intentional rest)
+- Lying on yoga mat or exercise mat (deliberate, in gym context) → CLEAR
+- Lying on padded mat/crash mat in a lab or office → CRITICAL (research fall simulation or real fall - treat as emergency)
+- Lying on bare floor motionless → CRITICAL
+- Lying on floor but moving/adjusting → LOW
+- Slumped in chair with head on desk, not moving → CRITICAL
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2: KEY VISUAL CLUES FOR EMERGENCY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Signs this IS an emergency (CRITICAL):
+✓ Person horizontal on floor in an office, lab, hallway, or lobby
+✓ Person completely still with no limb movement
+✓ Unnatural body angle (twisted, awkward position)
+✓ Person near overturned furniture or scattered objects
+✓ Other people in frame crouching over the person or looking alarmed
+✓ Person face-down on floor not moving
+✓ Person mid-fall (body at extreme diagonal angle)
+✓ Person slumped over desk completely still
+
+Signs this is NOT an emergency (CLEAR):
+✗ Person walking normally
+✗ Person standing and working
+✗ Person sitting upright in chair
+✗ Person lying on actual bed or couch furniture
+✗ Person doing deliberate floor exercises in gym
+✗ Person crouching briefly then standing back up
+✗ Person sitting on floor leaning against wall and appears alert
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3: VIOLENCE & FIGHT DETECTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ONE-ON-ONE FIGHTS (HIGH):
+✓ Two people punching or striking each other
+✓ One person grabbing another by collar or clothing
+✓ Slapping, kicking, or kneeing another person
+✓ One person choking or strangling another
+✓ Two people wrestling or grappling on the floor
+✓ Person throwing another person against wall or furniture
+✓ Person headbutting another person
+✓ One person pinning another to ground and striking them
+✓ Person pulling hair of another aggressively
+✓ Person twisting arm or joint of another (arm lock, wrist grab)
+
+GROUP FIGHTS (HIGH → CRITICAL if someone is down):
+✓ Three or more people engaged in physical altercation
+✓ Multiple people surrounding and striking one person (gang attack)
+✓ Mob violence — group attacking individual
+✓ Chain reaction brawl — fight spreading to more people
+✓ Person being stomped or kicked while on the ground by multiple people → CRITICAL
+✓ Group pinning one person against wall and striking → HIGH
+✓ Two groups facing off and physically clashing → HIGH
+✓ Crowd stampede with people falling and being trampled → CRITICAL
+
+WEAPONS & ARMED THREATS (CRITICAL):
+✓ Person visibly holding knife, gun, bat, bottle, or any weapon
+✓ Person swinging object as weapon at another person
+✓ Person threatening another with weapon even without contact
+✓ Broken glass or bottle used as weapon
+✓ Person struck with object and falling → CRITICAL
+✓ Gun being pointed at person → CRITICAL
+
+ASSAULT ESCALATING TO MEDICAL (CRITICAL):
+✓ Person knocked unconscious and lying motionless after fight
+✓ Person falling and hitting head after being struck
+✓ Person bleeding visibly on floor after altercation
+✓ Person not getting up after being knocked down
+✓ Victim left alone on floor after attackers flee → CRITICAL
+
+ROBBERY & THREATENING BEHAVIOR (HIGH):
+✓ Person grabbing bag, phone, or belongings from another aggressively
+✓ Person cornering another against wall in threatening posture
+✓ Person making threatening gestures with raised fist at another
+✓ Person blocking exit of another person aggressively
+✓ Intimidation — group surrounding individual in threatening way
+
+SUBTLE VIOLENCE SIGNS (LOW → HIGH):
+✓ Sudden pushing or shoving between two people
+✓ Heated argument with finger-pointing and invading personal space
+✓ Person grabbing another's arm to restrain them
+✓ One person following another aggressively
+✓ Person throwing objects at another person
+✓ Spitting at another person aggressively
+
+NOT VIOLENCE (CLEAR):
+✗ Two people talking closely or animatedly
+✗ One person moving quickly alone
+✗ People gesturing normally during conversation
+✗ Person carrying large objects
+✗ Sports activities — people tackling in sports context
+✗ People hugging or play-fighting with obvious mutual consent
+✗ Person tripping accidentally without another person causing it
+✗ Dance or performance involving physical contact
+✗ Children playing rough but mutually and happily
+✗ Security guard legally restraining a cooperative person
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4: AMBIGUOUS SITUATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+When unsure, use these tiebreakers:
+- Person on floor in office/lab/hallway with no obvious reason → CRITICAL
+- Person on floor but appears to be doing pushups or stretching → LOW
+- Person partially visible, unclear posture → LOW
+- Empty scene, no person visible → CLEAR
+- Scene too dark or blurry to determine → LOW
+- Ambiguous physical contact between two people → LOW (monitor)
+- Person appears distressed but no clear violence visible → LOW
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 5: FINAL CLASSIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CLEAR    → All people upright, seated on furniture, or moving normally. No concern.
+LOW      → Minor concern. Person on floor but moving/conscious. Ambiguous situation. Monitor only.
+HIGH     → Active violence or physical fight between people. Immediate security response needed.
+CRITICAL → Medical emergency OR person down after violence OR armed threat. Call for help NOW.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Respond with ONE word only: CLEAR, LOW, HIGH, or CRITICAL"""
+
+    try:
+        if frame is not None:
+            small_frame = cv2.resize(frame, (160, 120))
+            _, buffer = cv2.imencode('.jpg', small_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            image_bytes = bytes(buffer)
+            image_part = Part.from_data(data=image_bytes, mime_type="image/jpeg")
+            response = model.generate_content([image_part, prompt])
+        else:
+            response = model.generate_content(
+                f"{prompt}\nScene labels: {labels}\nAudio: {audio_text}"
+            )
+
+        result = "CLEAR"
+        for keyword in ["CRITICAL", "HIGH", "LOW", "CLEAR"]:
+            if keyword in response.text.strip().upper():
+                result = keyword
+                break
+
+        # ── STATE MACHINE ──────────────────────────────────────────
+        if result in ["CRITICAL", "HIGH"]:
+            critical_count += 1
+            clear_count = 0
+            threshold = 1 if sudden_fall else 2
+            if critical_count >= threshold:
+                emergency_active = True
+                return result
+            else:
+                print(f"⚠️  Possible {result} ({critical_count}/{threshold} confirmations)...")
+                return "LOW"
+
+        elif emergency_active:
+            if result == "CLEAR":
+                clear_count += 1
+                print(f"🟡 Emergency active, CLEAR {clear_count}/5 to cancel...")
+                if clear_count >= 5:
+                    emergency_active = False
+                    critical_count = 0
+                    clear_count = 0
+                    print("✅ Emergency cancelled — scene confirmed safe")
+                    return "CLEAR"
+                return "CRITICAL"
+            else:
+                clear_count = 0
+                return "CRITICAL"
+
+        else:
+            critical_count = 0
+            clear_count = 0
+            return result
+        # ──────────────────────────────────────────────────────────
+
+    except Exception as e:
+        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+            print("⏳ Rate limited, waiting 2s...")
+            time.sleep(2)
+            return "CRITICAL" if emergency_active else "CLEAR"
+        print(f"Gemini error: {e}")
+        return "CRITICAL" if emergency_active else "CLEAR"

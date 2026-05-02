@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OmniWatch — Secure Access</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--void:#05040a;--purple:#6c3de8;--lavender:#c77dff;--alert:#ff3366;--green:#00ffaa;--border:rgba(199,125,255,0.15);--text-primary:#e8e0ff;--text-muted:rgba(199,125,255,0.5)}
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    body{background:var(--void);color:var(--text-primary);font-family:'Syne',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+    .bg-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(108,61,232,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(108,61,232,.04) 1px,transparent 1px);background-size:48px 48px;pointer-events:none}
+    .bg-orb{position:fixed;border-radius:50%;filter:blur(120px);pointer-events:none;animation:orb-drift 12s ease-in-out infinite alternate}
+    .bg-orb-1{width:600px;height:600px;background:radial-gradient(circle,rgba(108,61,232,.18),transparent 70%);top:-200px;left:-100px}
+    .bg-orb-2{width:400px;height:400px;background:radial-gradient(circle,rgba(199,125,255,.10),transparent 70%);bottom:-100px;right:-50px;animation-delay:-6s}
+    @keyframes orb-drift{from{transform:translate(0,0) scale(1)}to{transform:translate(30px,20px) scale(1.08)}}
+    .scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);pointer-events:none}
+    .card{position:relative;z-index:10;width:440px;background:rgba(13,11,22,.85);border:1px solid var(--border);border-radius:24px;padding:48px 44px 44px;backdrop-filter:blur(24px);box-shadow:0 0 0 1px rgba(108,61,232,.1),0 40px 80px rgba(0,0,0,.6),0 0 120px rgba(108,61,232,.08);animation:card-in .7s cubic-bezier(.16,1,.3,1) both}
+    @keyframes card-in{from{opacity:0;transform:translateY(24px) scale(.97)}to{opacity:1;transform:none}}
+    .card::before{content:'';position:absolute;top:-1px;left:-1px;width:80px;height:80px;border-top:2px solid var(--purple);border-left:2px solid var(--purple);border-radius:24px 0 0 0;pointer-events:none}
+    .card::after{content:'';position:absolute;bottom:-1px;right:-1px;width:60px;height:60px;border-bottom:2px solid rgba(199,125,255,.3);border-right:2px solid rgba(199,125,255,.3);border-radius:0 0 24px 0;pointer-events:none}
+    .logo-row{display:flex;align-items:center;gap:12px;margin-bottom:30px}
+    .logo-icon{width:36px;height:36px}.logo-icon svg{width:100%;height:100%}
+    .logo-text{font-weight:800;font-size:18px;letter-spacing:.15em;text-transform:uppercase}
+    .logo-text span{color:var(--lavender)}
+    .status-dot{width:6px;height:6px;background:var(--green);border-radius:50%;margin-left:auto;box-shadow:0 0 8px var(--green);animation:pulse-dot 2s ease-in-out infinite}
+    @keyframes pulse-dot{0%,100%{opacity:1;box-shadow:0 0 8px var(--green)}50%{opacity:.4;box-shadow:0 0 4px var(--green)}}
+    .title{font-family:'Cormorant Garamond',serif;font-weight:300;font-size:30px;line-height:1.1;margin-bottom:4px}
+    .subtitle{font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:22px}
+    .tabs{display:flex;margin-bottom:22px;border-bottom:1px solid var(--border)}
+    .tab{flex:1;padding:9px;text-align:center;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;margin-bottom:-1px}
+    .tab.active{color:var(--lavender);border-bottom-color:var(--lavender)}
+    .field-label{display:block;font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px}
+    .field-input{width:100%;background:rgba(108,61,232,.06);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-family:'Syne',sans-serif;font-size:13px;color:var(--text-primary);outline:none;transition:border-color .2s,box-shadow .2s,background .2s;margin-bottom:13px}
+    .field-input::placeholder{color:rgba(199,125,255,.25)}
+    .field-input:focus{border-color:rgba(108,61,232,.6);background:rgba(108,61,232,.10);box-shadow:0 0 0 3px rgba(108,61,232,.12)}
+    .divider{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+    .divider-line{flex:1;height:1px;background:var(--border)}
+    .divider-text{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted)}
+    .biometric-btn{width:100%;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:20px;background:transparent;border:1px solid rgba(108,61,232,.35);border-radius:14px;cursor:pointer;transition:all .25s ease;margin-bottom:12px;overflow:hidden}
+    .biometric-btn::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(108,61,232,.15),transparent 70%);opacity:0;transition:opacity .3s}
+    .biometric-btn:hover{border-color:rgba(199,125,255,.5);transform:translateY(-2px);box-shadow:0 8px 30px rgba(108,61,232,.2)}
+    .biometric-btn:hover::before{opacity:1}
+    .biometric-btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+    .scan-ring{position:absolute;width:80px;height:80px;border-radius:50%;border:1px solid rgba(108,61,232,.3);top:50%;left:50%;transform:translate(-50%,-50%) scale(0);opacity:0;pointer-events:none}
+    .biometric-btn.scanning .scan-ring{animation:scan-expand 1.2s ease-out infinite}
+    @keyframes scan-expand{0%{transform:translate(-50%,-50%) scale(0);opacity:.8}100%{transform:translate(-50%,-50%) scale(2.5);opacity:0}}
+    .fp-icon{width:44px;height:44px}.fp-icon svg{width:100%;height:100%;color:var(--lavender);transition:color .3s}
+    .biometric-btn:hover .fp-icon svg{color:var(--purple);filter:drop-shadow(0 0 8px var(--lavender))}
+    .bio-label{font-size:13px;font-weight:600;letter-spacing:.06em;color:var(--text-primary)}
+    .bio-sub{font-size:11px;color:var(--text-muted)}
+    .scanning-active .fp-path{animation:fp-glow .8s ease-in-out infinite alternate}
+    @keyframes fp-glow{from{stroke:var(--lavender)}to{stroke:var(--green);filter:drop-shadow(0 0 4px var(--green))}}
+    .continue-btn{width:100%;padding:13px;background:var(--purple);border:none;border-radius:10px;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#fff;cursor:pointer;transition:all .25s ease;margin-top:2px}
+    .continue-btn:hover{background:#7a4af0;transform:translateY(-2px);box-shadow:0 8px 24px rgba(108,61,232,.45)}
+    .back-btn{width:100%;padding:8px;background:transparent;border:none;color:var(--text-muted);font-family:'Syne',sans-serif;font-size:11px;letter-spacing:1px;cursor:pointer;margin-top:-4px}
+    .back-btn:hover{color:var(--text-primary)}
+    .status-msg{padding:10px 13px;border-radius:8px;font-size:11px;font-weight:500;letter-spacing:.04em;display:none;align-items:center;gap:8px;margin-top:10px}
+    .status-msg.visible{display:flex}
+    .status-msg.info{background:rgba(108,61,232,.12);border:1px solid rgba(108,61,232,.25);color:var(--lavender)}
+    .status-msg.success{background:rgba(0,255,170,.08);border:1px solid rgba(0,255,170,.25);color:var(--green)}
+    .status-msg.error{background:rgba(255,51,102,.08);border:1px solid rgba(255,51,102,.25);color:var(--alert)}
+    .status-dot-sm{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:currentColor}
+    .steps{display:flex;gap:6px;margin-bottom:16px;align-items:center}
+    .step{flex:1;height:2px;border-radius:2px;background:rgba(108,61,232,.2);transition:background .3s}
+    .step.active{background:var(--purple)}.step.done{background:var(--green)}
+    .step-label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);white-space:nowrap}
+    .card-footer{margin-top:18px;padding-top:14px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+    .security-badge{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted)}
+    .security-badge svg{width:12px;height:12px;color:var(--green)}
+    .version-tag{font-size:10px;color:rgba(199,125,255,.25);letter-spacing:.08em}
+    .success-overlay{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--void);opacity:0;pointer-events:none;transition:opacity .4s}
+    .success-overlay.show{opacity:1;pointer-events:all}
+    .success-ring{width:64px;height:64px;border-radius:50%;background:rgba(0,255,170,.1);border:2px solid var(--green);display:flex;align-items:center;justify-content:center;font-size:28px;box-shadow:0 0 40px rgba(0,255,170,.3)}
+    .success-text{font-family:'Cormorant Garamond',serif;font-size:1.8rem;font-weight:300}
+    .success-sub{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text-muted)}
+  </style>
+</head>
+<body>
+<div class="bg-grid"></div><div class="bg-orb bg-orb-1"></div><div class="bg-orb bg-orb-2"></div><div class="scanlines"></div>
+<div class="success-overlay" id="successOverlay">
+  <div class="success-ring">checkmark</div>
+  <div class="success-text">Access Granted</div>
+  <div class="success-sub" id="successName">Welcome</div>
+</div>
+<div class="card">
+  <div class="logo-row">
+    <div class="logo-icon">
+      <svg viewBox="0 0 36 36" fill="none">
+        <circle cx="18" cy="18" r="14" stroke="#6c3de8" stroke-width="1.5"/>
+        <circle cx="18" cy="18" r="8" stroke="#c77dff" stroke-width="1" stroke-dasharray="3 2"/>
+        <circle cx="18" cy="18" r="3" fill="#6c3de8"/>
+        <path d="M18 4L18 8M32 18L28 18M18 32L18 28M4 18L8 18" stroke="#c77dff" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="logo-text">Omni<span>Watch</span></div>
+    <div class="status-dot"></div>
+  </div>
+  <div class="title">Secure<br><em>Access Portal</em></div>
+  <div class="subtitle">Emergency Detection System - Restricted</div>
+  <div class="tabs">
+    <div class="tab active" id="tab-login" onclick="switchTab('login')">Sign In</div>
+    <div class="tab" id="tab-register" onclick="switchTab('register')">Create Account</div>
+  </div>
+  <div id="panelLogin">
+    <label class="field-label" for="loginUsername">Operator ID</label>
+    <input class="field-input" id="loginUsername" type="text" placeholder="e.g. sanjit, judge1" autocomplete="username webauthn" autocapitalize="none" spellcheck="false"/>
+    <div class="divider"><div class="divider-line"></div><div class="divider-text">Authenticate</div><div class="divider-line"></div></div>
+    <button class="biometric-btn" id="loginBtn" onclick="startLogin()">
+      <div class="scan-ring"></div>
+      <div class="fp-icon" id="loginFpIcon">
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path class="fp-path" d="M24 8C15.2 8 8 15.2 8 24"/><path class="fp-path" d="M24 8C32.8 8 40 15.2 40 24"/>
+          <path class="fp-path" d="M13 30c0-6.1 4.9-11 11-11s11 4.9 11 11"/><path class="fp-path" d="M18 36c0-3.3 2.7-6 6-6s6 2.7 6 6"/>
+          <path class="fp-path" d="M8 28c.5 3.5 2 6.7 4 9.5"/><path class="fp-path" d="M40 28c-.5 3.5-2 6.7-4 9.5"/>
+          <path class="fp-path" d="M24 19v-3"/><circle class="fp-path" cx="24" cy="24" r="1.5" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="bio-label">Touch ID / Windows Hello</div>
+      <div class="bio-sub">Use biometric passkey to authenticate</div>
+    </button>
+    <div class="status-msg info visible" id="loginStatus">
+      <div class="status-dot-sm"></div><span id="loginStatusText">Enter your Operator ID then tap the sensor.</span>
+    </div>
+  </div>
+  <div id="panelRegister" style="display:none">
+    <div class="steps">
+      <div class="step active" id="step1bar"></div>
+      <div class="step" id="step2bar"></div>
+      <span class="step-label" id="stepLabel">Step 1 of 2 - Your Details</span>
+    </div>
+    <div id="regStep1">
+      <label class="field-label" for="regUsername">Username</label>
+      <input class="field-input" id="regUsername" type="text" placeholder="Choose a username" autocapitalize="none" spellcheck="false"/>
+      <label class="field-label" for="regDisplayName">Full Name</label>
+      <input class="field-input" id="regDisplayName" type="text" placeholder="e.g. Sanjit Subhash"/>
+      <label class="field-label" for="regEmail">Email</label>
+      <input class="field-input" id="regEmail" type="email" placeholder="you@example.com"/>
+      <button class="continue-btn" onclick="goToStep2()">Continue to Biometric</button>
+    </div>
+    <div id="regStep2" style="display:none">
+      <div class="divider"><div class="divider-line"></div><div class="divider-text">Register Biometric</div><div class="divider-line"></div></div>
+      <button class="biometric-btn" id="regBioBtn" onclick="startRegister()">
+        <div class="scan-ring"></div>
+        <div class="fp-icon" id="regFpIcon">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path class="fp-path" d="M24 8C15.2 8 8 15.2 8 24"/><path class="fp-path" d="M24 8C32.8 8 40 15.2 40 24"/>
+            <path class="fp-path" d="M13 30c0-6.1 4.9-11 11-11s11 4.9 11 11"/><path class="fp-path" d="M18 36c0-3.3 2.7-6 6-6s6 2.7 6 6"/>
+            <path class="fp-path" d="M8 28c.5 3.5 2 6.7 4 9.5"/><path class="fp-path" d="M40 28c-.5 3.5-2 6.7-4 9.5"/>
+            <path class="fp-path" d="M24 19v-3"/><circle class="fp-path" cx="24" cy="24" r="1.5" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="bio-label">Register Touch ID / Windows Hello</div>
+        <div class="bio-sub">Tap to scan your biometric</div>
+      </button>
+      <button class="back-btn" onclick="backToStep1()">Back</button>
+    </div>
+    <div class="status-msg" id="regStatus"><div class="status-dot-sm"></div><span id="regStatusText"></span></div>
+  </div>
+  <div class="card-footer">
+    <div class="security-badge">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M8 1.5L2 4v4c0 3.3 2.6 6.4 6 7 3.4-.6 6-3.7 6-7V4L8 1.5z"/>
+        <path d="M5.5 8l2 2 3-3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      WebAuthn FIDO2 Secured
+    </div>
+    <div class="version-tag">v2.0.1 DevFest</div>
+  </div>
+</div>
+<script>
+const API='http://localhost:8000';
+function switchTab(t){document.getElementById('tab-login').classList.toggle('active',t==='login');document.getElementById('tab-register').classList.toggle('active',t==='register');document.getElementById('panelLogin').style.display=t==='login'?'block':'none';document.getElementById('panelRegister').style.display=t==='register'?'block':'none';}
+function goToStep2(){const u=document.getElementById('regUsername').value.trim();const n=document.getElementById('regDisplayName').value.trim();const e=document.getElementById('regEmail').value.trim();if(!u||!n||!e){showReg('Please fill in all fields.','error');return;}if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)){showReg('Enter a valid email.','error');return;}document.getElementById('regStep1').style.display='none';document.getElementById('regStep2').style.display='block';document.getElementById('step1bar').className='step done';document.getElementById('step2bar').className='step active';document.getElementById('stepLabel').textContent='Step 2 of 2 - Biometric';clearReg();}
+function backToStep1(){document.getElementById('regStep2').style.display='none';document.getElementById('regStep1').style.display='block';document.getElementById('step1bar').className='step active';document.getElementById('step2bar').className='step';document.getElementById('stepLabel').textContent='Step 1 of 2 - Your Details';clearReg();}
+function showLogin(msg,type){const el=document.getElementById('loginStatus');el.className='status-msg '+type+' visible';document.getElementById('loginStatusText').textContent=msg;}
+function showReg(msg,type){const el=document.getElementById('regStatus');el.className='status-msg '+type+' visible';document.getElementById('regStatusText').textContent=msg;}
+function clearReg(){document.getElementById('regStatus').className='status-msg';}
+function setScan(btn,icon,on){const b=document.getElementById(btn);const i=document.getElementById(icon);b.disabled=on;b.classList.toggle('scanning',on);if(i)i.classList.toggle('scanning-active',on);}
+function b64u(b){return Uint8Array.from(atob(b.replace(/-/g,'+').replace(/_/g,'/')),function(c){return c.charCodeAt(0);});}
+function toB64u(buf){return btoa(String.fromCharCode.apply(null,new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');}
+function ser(c){var o={id:c.id,rawId:toB64u(c.rawId),type:c.type,response:{}};if(c.response.attestationObject){o.response.attestationObject=toB64u(c.response.attestationObject);o.response.clientDataJSON=toB64u(c.response.clientDataJSON);if(c.response.getTransports)o.response.transports=c.response.getTransports();}else{o.response.authenticatorData=toB64u(c.response.authenticatorData);o.response.clientDataJSON=toB64u(c.response.clientDataJSON);o.response.signature=toB64u(c.response.signature);if(c.response.userHandle)o.response.userHandle=toB64u(c.response.userHandle);}return o;}
+async function startLogin(){
+  var username=document.getElementById('loginUsername').value.trim();
+  if(!username){showLogin('Please enter your Operator ID.','error');return;}
+  if(!window.PublicKeyCredential){showLogin('WebAuthn not supported.','error');return;}
+  setScan('loginBtn','loginFpIcon',true);showLogin('Requesting challenge...','info');
+  try{
+    var r1=await fetch(API+'/auth/login/options',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:username})});
+    if(!r1.ok){var e1=await r1.json().catch(function(){return{};});throw new Error(e1.detail||'Error '+r1.status);}
+    var d1=await r1.json();var opts=JSON.parse(d1.options);
+    opts.challenge=b64u(opts.challenge);
+    if(opts.allowCredentials)opts.allowCredentials=opts.allowCredentials.map(function(c){return Object.assign({},c,{id:b64u(c.id)});});
+    showLogin('Waiting for biometric...','info');
+    var cred=await navigator.credentials.get({publicKey:opts});
+    showLogin('Verifying...','info');
+    var r2=await fetch(API+'/auth/login/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({challenge:d1.challenge,credential:ser(cred)})});
+    if(!r2.ok){var e2=await r2.json().catch(function(){return{};});throw new Error(e2.detail||'Error '+r2.status);}
+    var d2=await r2.json();
+    sessionStorage.setItem('omniwatch_token',d2.access_token);sessionStorage.setItem('omniwatch_user',JSON.stringify(d2.user));
+    showLogin('Identity confirmed.','success');setScan('loginBtn','loginFpIcon',false);
+    document.getElementById('successName').textContent='Welcome, '+d2.user.display_name;
+    document.getElementById('successOverlay').classList.add('show');
+    setTimeout(function(){window.location.href='index.html';},1600);
+  }catch(err){setScan('loginBtn','loginFpIcon',false);showLogin(err.name==='NotAllowedError'?'Biometric dismissed. Try again.':'Failed: '+err.message,'error');}
+}
+async function startRegister(){
+  var username=document.getElementById('regUsername').value.trim();
+  var display_name=document.getElementById('regDisplayName').value.trim();
+  var email=document.getElementById('regEmail').value.trim();
+  if(!window.PublicKeyCredential){showReg('WebAuthn not supported.','error');return;}
+  setScan('regBioBtn','regFpIcon',true);showReg('Creating your account...','info');
+  try{
+    var r1=await fetch(API+'/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:username,display_name:display_name,email:email})});
+    if(!r1.ok){var e1=await r1.json().catch(function(){return{};});throw new Error(e1.detail||'Error '+r1.status);}
+    var d1=await r1.json();var opts=JSON.parse(d1.options);
+    opts.challenge=b64u(opts.challenge);opts.user.id=b64u(opts.user.id);
+    if(opts.excludeCredentials)opts.excludeCredentials=opts.excludeCredentials.map(function(c){return Object.assign({},c,{id:b64u(c.id)});});
+    showReg('Waiting for biometric...','info');
+    var cred=await navigator.credentials.create({publicKey:opts});
+    showReg('Saving credential...','info');
+    var r2=await fetch(API+'/auth/register/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:username,challenge:d1.challenge,credential:ser(cred),friendly_name:null})});
+    if(!r2.ok){var e2=await r2.json().catch(function(){return{};});throw new Error(e2.detail||'Error '+r2.status);}
+    setScan('regBioBtn','regFpIcon',false);
+    showReg('Account created! Switching to sign in...','success');
+    setTimeout(function(){switchTab('login');backToStep1();},2000);
+  }catch(err){setScan('regBioBtn','regFpIcon',false);showReg(err.name==='NotAllowedError'?'Biometric dismissed. Try again.':'Failed: '+err.message,'error');}
+}
+document.addEventListener('keydown',function(e){if(e.key==='Enter'&&document.getElementById('panelLogin').style.display!=='none')startLogin();});
+var t=sessionStorage.getItem('omniwatch_token');
+if(t)fetch(API+'/auth/me',{headers:{'Authorization':'Bearer '+t}}).then(function(r){if(r.ok)window.location.href='index.html';else sessionStorage.clear();}).catch(function(){});
+</script>
+</body>
+</html>

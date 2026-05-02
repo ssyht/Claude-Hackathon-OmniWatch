@@ -1,0 +1,55 @@
+# 🔐 Environment variables (VERY IMPORTANT)
+.env
+.env.*
+
+# 🔑 Google Cloud credentials
+*.json
+!package.json  # (just in case, keeps Node config if any)
+
+# 🐍 Python cache & compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 📦 Virtual environment
+venv/
+.env/
+.venv/
+
+# 🧪 Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# 🧾 Logs
+*.log
+
+# 📁 Data files (videos, audio, outputs)
+data/
+*.avi
+*.mp4
+*.wav
+*.mp3
+
+# 📸 Images (optional if you store frames)
+*.jpg
+*.jpeg
+*.png
+
+# 🗂 OS files
+.DS_Store
+Thumbs.db
+
+# 🧰 IDE / Editor files
+.vscode/
+.idea/
+*.swp
+
+# 🐳 Docker (if you use it)
+*.env.docker
+
+# 📊 Temporary files
+tmp/
+temp/
+
+# 🧪 Testing / debug
+debug/
+output/
