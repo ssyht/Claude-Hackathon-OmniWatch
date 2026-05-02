@@ -3,34 +3,22 @@
 
 > *"OmniWatch watches your cameras and listens to your building — and the moment someone is in danger, it finds the fastest way to get them help."*
 
-Built for the **Google Build with AI Hackathon** — Washington University in St. Louis, April 2026  
+Built for the **Claude Hackathon** — University of Missouri, May 2026  
 Team: **Sanjit Subhash**
 
 ---
 
 ## What Is OmniWatch?
 
-OmniWatch is a real-time AI safety system that monitors live camera feeds and audio streams to detect emergencies — falls, fights, collapses — and instantly routes the fastest medical response. Powered by **Google Gemini 2.5 Pro Vision**, it detects incidents in **under 10 seconds**, a **30× improvement** over traditional human response chains, and delivers up to a **+41 percentage point** improvement in cardiac arrest survival probability.
+OmniWatch is a real-time AI safety system that monitors live camera feeds and audio streams to detect emergencies — falls, fights, collapses — and instantly routes the fastest medical response. Powered by **YOLO (Open Source) Vision**, it detects incidents in **under 10 seconds**, a **30× improvement** over traditional human response chains, and delivers up to a **+41 percentage point** improvement in cardiac arrest survival probability.
 
 ---
 
-## How It Works
-
-```
-Camera Feed → OpenCV → Optical Flow → Gemini Vision → CRITICAL/HIGH/LOW/CLEAR
-Audio Stream → ffmpeg → Speech-to-Text → Keyword Detection → Audio Decision
-                                    ↓
-                    Cfused = 0.65·Cv + 0.35·Ca
-                                    ↓
-                    Survival P(t) = 0.70 · e^(−0.10·t)
-                                    ↓
-                         Dashboard Alert + Hospital Routing
-```
 
 **Three AI Layers:**
-- **Vision AI** — Gemini 2.5 Pro Vision analyzes every frame for falls, fights, collapsed persons
+- **Vision AI** — YOLO model analyzes every frame for falls, fights, collapsed persons
 - **Audio AI** — Google Cloud Speech-to-Text detects screams, distress keywords, impact sounds
-- **Agentic AI** — Fuses multimodal evidence, classifies severity, routes to optimal hospital
+- **Agentic AI** — The claude model fuses multimodal evidence, classifies severity, routes to optimal hospital
 
 ---
 
@@ -183,19 +171,6 @@ Then open:
 - Make sure `backend/.env` contains `GEMINI_API_KEY` and `GOOGLE_APPLICATION_CREDENTIALS`
 - If your backend listens on a different port, update both the service `ports` mapping and the app configuration
 
----
-
-
-## Google APIs Used
-
-| API | Purpose |
-|-----|---------|
-| **Gemini 2.5 Pro Vision** | Multimodal emergency classification from camera frames |
-| **Cloud Vision API** | Scene label extraction |
-| **Cloud Speech-to-Text** | Audio transcription for distress keyword detection |
-| **Vertex AI** | Model hosting and authentication |
-
----
 
 ## Detection Capabilities
 
@@ -272,36 +247,6 @@ sample_every = 10   # analyze every N frames
 min_gemini_gap = 10 # minimum frames between Gemini calls
 ```
 
-### Emergency confirmation threshold
-In `gemini_api.py`:
-```python
-threshold = 1 if sudden_fall else 2  # confirmations needed before CRITICAL
-```
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│                    OmniWatch                        │
-├─────────────┬───────────────────┬───────────────────┤
-│  Vision AI  │    Agentic AI     │    Audio AI       │
-│             │                   │                   │
-│  OpenCV     │  Gemini 2.5 Pro   │  Speech-to-Text   │
-│  Opt. Flow  │  Confidence Fusion│  Energy Detection │
-│  Cloud      │  State Machine    │  Keyword Match    │
-│  Vision     │  Hospital Routing │                   │
-└─────────────┴───────────────────┴───────────────────┘
-                         │
-                         ▼
-              ┌──────────────────┐
-              │    Dashboard     │
-              │  WebSocket Live  │
-              │  Leaflet Map     │
-              │  Survival P(t)   │
-              └──────────────────┘
-```
 
 ---
 
@@ -347,4 +292,3 @@ __pycache__/
 
 ---
 
-*Built with ❤️ at WashU for Google Devfest Build with AI Hackathon 2026*
