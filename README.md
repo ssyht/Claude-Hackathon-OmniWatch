@@ -4,7 +4,7 @@
 > *"OmniWatch watches your cameras and listens to your building — and the moment someone is in danger, it finds the fastest way to get them help."*
 
 Built for the **Google Build with AI Hackathon** — Washington University in St. Louis, April 2026  
-Team: **Sanjit Subhash, Lomesh Vanapalli, Joel Aikkarakudiyil Joby, Preetham Reddy Dodda**
+Team: **Sanjit Subhash**
 
 ---
 
